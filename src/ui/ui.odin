@@ -166,6 +166,7 @@ UI :: struct {
 	sim_wheel:      Vec2,
 	wheel_v:        Vec2, // scroll this frame (x, y)
 	rects:          map[Id]Rect, // last rect of each button, for tests
+	advance:        [Font_Kind][128]f32,
 }
 
 // ---------------------------------------------------------------------------
@@ -214,6 +215,7 @@ init :: proc(ui: ^UI, asset_dir: string) {
 	ui.fonts[.Semibold] = ui.fonts[.Regular]
 	ui.fonts[.Title] = ui.fonts[.Regular]
 	ui.fonts[.Big] = load_font(path, FONT_SIZES[.Big], ui.dpi)
+	build_advances(ui)
 	ui.input_enabled = true
 	ui.popup_choice = -1
 }
@@ -439,17 +441,34 @@ inset :: proc(r: Rect, d: f32) -> Rect {return {r.x + d, r.y + d, r.width - 2 * 
 
 font_size :: proc(k: Font_Kind) -> f32 {return FONT_SIZES[k]}
 
-text_width :: proc(ui: ^UI, s: string, k: Font_Kind = .Regular) -> f32 {
-	if len(s) == 0 {return 0}
-	f := ui.fonts[k]
-	size := FONT_SIZES[k]
-	scale := size / f32(f.baseSize)
-	w: f32
-	for r in s {
-		gi := rl.GetGlyphIndex(f, r)
-		adv := f.glyphs[gi].advanceX
-		w += adv != 0 ? f32(adv) * scale : f.recs[gi].width * scale
+@(private)
+glyph_advance :: proc(f: rl.Font, r: rune) -> f32 {
+	gi := rl.GetGlyphIndex(f, r)
+	adv := f.glyphs[gi].advanceX
+	return adv != 0 ? f32(adv) : f.recs[gi].width
+}
+
+// ASCII advances in points, measured once per font so text layout avoids
+// raylib's per-character glyph search.
+@(private)
+build_advances :: proc(ui: ^UI) {
+	for k in Font_Kind {
+		f := ui.fonts[k]
+		scale := FONT_SIZES[k] / f32(f.baseSize)
+		for c in 0 ..< 128 {ui.advance[k][c] = glyph_advance(f, rune(c)) * scale}
 	}
+}
+
+@(private)
+char_width :: #force_inline proc(ui: ^UI, r: rune, k: Font_Kind) -> f32 {
+	if r < 128 {return ui.advance[k][r]}
+	f := ui.fonts[k]
+	return glyph_advance(f, r) * FONT_SIZES[k] / f32(f.baseSize)
+}
+
+text_width :: proc(ui: ^UI, s: string, k: Font_Kind = .Regular) -> f32 {
+	w: f32
+	for r in s {w += char_width(ui, r, k)}
 	return w
 }
 
@@ -470,11 +489,17 @@ text_in :: proc(ui: ^UI, s: string, r: Rect, k: Font_Kind = .Regular, c: Color =
 	s := s
 	w := text_width(ui, s, k)
 	if w > r.width && len(s) > 1 {
-		for len(s) > 1 && text_width(ui, s, k) + text_width(ui, "…", k) > r.width {
-			_, sz := utf8.decode_last_rune_in_string(s)
-			s = s[:len(s) - sz]
+		// keep the longest prefix that fits together with the ellipsis
+		budget := r.width - char_width(ui, '…', k)
+		used: f32
+		cut := 0
+		for ch, i in s {
+			cw := char_width(ui, ch, k)
+			if used + cw > budget {break}
+			used += cw
+			cut = i + utf8.rune_size(ch)
 		}
-		s = strings.concatenate({s, "…"}, context.temp_allocator)
+		s = strings.concatenate({s[:max(cut, 1)], "…"}, context.temp_allocator)
 		w = text_width(ui, s, k)
 	}
 	size := FONT_SIZES[k]

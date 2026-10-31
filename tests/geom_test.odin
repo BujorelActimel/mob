@@ -188,3 +188,37 @@ test_raycast :: proc(t: ^testing.T) {
 	_, hit = geom.ray_aabb(r, {50, -1, -1}, {60, 1, 1})
 	testing.expect(t, !hit)
 }
+
+@(test)
+test_extrude_rounded_edges :: proc(t: ^testing.T) {
+	// 300 x 200 panel, 18 thick, corners and edges rounded by 3
+	prof: geom.Profile2D
+	prof.outer = geom.contour_from_polygon([]geom.Vec2{{0, 0}, {300, 0}, {300, 200}, {0, 200}}, []f32{3, 3, 3, 3}, true, context.temp_allocator)
+	m: geom.Mesh_Data
+	geom.mesh_init(&m, context.temp_allocator)
+	geom.extrude_profile(prof, 18, 0.05, &m, 3)
+	lo, hi := geom.mesh_bounds(m)
+	testing.expectf(t, linalg.length(lo - geom.Vec3{0, 0, -200}) < 0.01 && linalg.length(hi - geom.Vec3{300, 18, 0}) < 0.01, "bounds %v %v", lo, hi)
+	top_area: f32
+	for k := 0; k < len(m.positions); k += 3 {
+		f := linalg.cross(m.positions[k + 1] - m.positions[k], m.positions[k + 2] - m.positions[k])
+		testing.expect(t, linalg.dot(f, m.normals[k] + m.normals[k + 1] + m.normals[k + 2]) > 0)
+		testing.expect(t, abs(linalg.length(m.normals[k]) - 1) < 1e-3)
+		if m.normals[k].y > 0.9999 && m.normals[k + 1].y > 0.9999 && m.normals[k + 2].y > 0.9999 && m.positions[k].y > 17.99 {
+			top_area += linalg.length(f) * 0.5
+		}
+	}
+	// flat top = outline inset by 3: (294 x 194) with sharp corners (fillet 3 - 3 = 0)
+	testing.expectf(t, abs(top_area - 294 * 194) < 294 * 194 * 0.001, "top area %v", top_area)
+	max_x_at :: proc(m: geom.Mesh_Data, y: f32) -> f32 {
+		mx := f32(-1)
+		for p in m.positions {if abs(p.y - y) < 1e-3 {mx = max(mx, p.x)}}
+		return mx
+	}
+	testing.expectf(t, abs(max_x_at(m, 15) - 300) < 1e-3, "rounding starts on the outline: %v", max_x_at(m, 15))
+	testing.expectf(t, abs(max_x_at(m, 18) - 297) < 1e-2, "top is inset by the radius: %v", max_x_at(m, 18))
+	// only cap loops as feature edges (no sharp verticals)
+	for k := 0; k < len(m.edges); k += 2 {
+		testing.expect(t, m.edges[k].y == m.edges[k + 1].y)
+	}
+}

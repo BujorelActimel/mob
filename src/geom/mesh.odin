@@ -113,7 +113,39 @@ to3 :: proc(p: Vec2, y: f32) -> Vec3 {return {p.x, y, -p.y}}
 
 UV_SCALE :: 1.0 / 600.0 // one texture repeat per 600 mm
 
-extrude_profile :: proc(prof: Profile2D, thickness: f32, tol: f32, m: ^Mesh_Data) {
+// A horizontal slice of an extruded wall: height, inward inset, and how the
+// normal blends between the outline normal (h) and straight up/down (v).
+@(private)
+Wall_Ring :: struct {
+	y, inset: f32,
+	nh, nv:   f32,
+}
+
+ROUND_STEPS :: 6 // segments per quarter-circle edge rounding
+
+// Moves every point of a closed ring inward (into the material) by `d`.
+// Holes are clockwise, so the same formula grows them.
+@(private)
+inset_ring :: proc(pts: []Vec2, ri: Ring_Info, d: f32, allocator := context.temp_allocator) -> []Vec2 {
+	n := len(pts)
+	out := make([]Vec2, n, allocator)
+	for i in 0 ..< n {
+		if d == 0 {
+			out[i] = pts[i]
+			continue
+		}
+		a := ri.edge_n[(i + n - 1) % n]
+		b := ri.edge_n[i]
+		avg := linalg.normalize0(a + b)
+		out[i] = pts[i] - avg * d / max(linalg.dot(avg, b), 0.25)
+	}
+	return out
+}
+
+// Extrudes along +Y by `thickness`. With `edge_r` > 0 the top and bottom
+// perimeter edges are rounded with that radius (the outline should already
+// have corner radii >= edge_r so the vertical corners blend in).
+extrude_profile :: proc(prof: Profile2D, thickness: f32, tol: f32, m: ^Mesh_Data, edge_r: f32 = 0) {
 	ta := context.temp_allocator
 	outer := make([dynamic]Vec2, ta)
 	tessellate_contour(prof.outer, tol, &outer)
@@ -127,9 +159,27 @@ extrude_profile :: proc(prof: Profile2D, thickness: f32, tol: f32, m: ^Mesh_Data
 		if polygon_area(hp[:]) > 0 {reverse_points(hp[:])}
 		append(&holes, hp[:])
 	}
+	e := clamp(edge_r, 0, thickness * 0.5 - 0.01)
 
-	// caps
-	verts, tris := triangulate(outer[:], holes[:], ta)
+	rings := make([dynamic]Wall_Ring, ta)
+	if e <= 0 {
+		append(&rings, Wall_Ring{0, 0, 1, 0}, Wall_Ring{thickness, 0, 1, 0})
+	} else {
+		for k in 0 ..= ROUND_STEPS {
+			phi := f32(k) / ROUND_STEPS * math.PI * 0.5
+			append(&rings, Wall_Ring{e * (1 - math.cos(phi)), e * (1 - math.sin(phi)), math.sin(phi), -math.cos(phi)})
+		}
+		for k := ROUND_STEPS; k >= 0; k -= 1 {
+			phi := f32(k) / ROUND_STEPS * math.PI * 0.5
+			append(&rings, Wall_Ring{thickness - e * (1 - math.cos(phi)), e * (1 - math.sin(phi)), math.sin(phi), math.cos(phi)})
+		}
+	}
+
+	// caps, inset by the rounding so they meet the curved band
+	cap_outer := inset_ring(outer[:], ring_info(outer[:], true), e)
+	cap_holes := make([dynamic][]Vec2, ta)
+	for h in holes {append(&cap_holes, inset_ring(h, ring_info(h, true), e))}
+	verts, tris := triangulate(cap_outer, cap_holes[:], ta)
 	up := Vec3{0, 1, 0}
 	for k := 0; k + 2 < len(tris); k += 3 {
 		a, b, c := verts[tris[k]], verts[tris[k + 1]], verts[tris[k + 2]]
@@ -137,35 +187,41 @@ extrude_profile :: proc(prof: Profile2D, thickness: f32, tol: f32, m: ^Mesh_Data
 		tri(m, to3(a, 0), to3(b, 0), to3(c, 0), -up, -up, -up, a * UV_SCALE, b * UV_SCALE, c * UV_SCALE)
 	}
 
-	walls :: proc(m: ^Mesh_Data, pts: []Vec2, t: f32) {
+	walls :: proc(m: ^Mesh_Data, pts: []Vec2, rings: []Wall_Ring, rounded: bool) {
 		n := len(pts)
 		ri := ring_info(pts, true)
+		insets := make([][]Vec2, len(rings), context.temp_allocator)
+		for r, k in rings {insets[k] = inset_ring(pts, ri, r.inset)}
 		s: f32 = 0
 		for i in 0 ..< n {
 			j := (i + 1) % n
-			p, q := pts[i], pts[j]
-			len_e := linalg.length(q - p)
+			len_e := linalg.length(pts[j] - pts[i])
 			n0 := vertex_normal(ri, i, i, n)
 			n1 := vertex_normal(ri, j, i, n)
-			N0 := Vec3{n0.x, 0, -n0.y}
-			N1 := Vec3{n1.x, 0, -n1.y}
-			a, b := to3(p, 0), to3(q, 0)
-			c, d := to3(q, t), to3(p, t)
-			ua := Vec2{s, 0} * UV_SCALE
-			ub := Vec2{s + len_e, 0} * UV_SCALE
-			uc := Vec2{s + len_e, t} * UV_SCALE
-			ud := Vec2{s, t} * UV_SCALE
-			tri(m, a, b, c, N0, N1, N1, ua, ub, uc)
-			tri(m, a, c, d, N0, N1, N0, ua, uc, ud)
+			for k in 0 ..< len(rings) - 1 {
+				r0, r1 := rings[k], rings[k + 1]
+				N :: proc(n2: Vec2, r: Wall_Ring) -> Vec3 {return linalg.normalize(Vec3{n2.x * r.nh, r.nv, -n2.y * r.nh})}
+				a := to3(insets[k][i], r0.y)
+				b := to3(insets[k][j], r0.y)
+				c := to3(insets[k + 1][j], r1.y)
+				d := to3(insets[k + 1][i], r1.y)
+				ua := Vec2{s, r0.y} * UV_SCALE
+				ub := Vec2{s + len_e, r0.y} * UV_SCALE
+				uc := Vec2{s + len_e, r1.y} * UV_SCALE
+				ud := Vec2{s, r1.y} * UV_SCALE
+				tri(m, a, b, c, N(n0, r0), N(n1, r0), N(n1, r1), ua, ub, uc)
+				tri(m, a, c, d, N(n0, r0), N(n1, r1), N(n0, r1), ua, uc, ud)
+			}
 			s += len_e
-			// feature edges: outline loops, plus verticals at hard corners
-			edge(m, a, b)
-			edge(m, d, c)
-			if !ri.smooth[i] {edge(m, a, d)}
+			// feature edges: where the caps meet the sides, plus sharp verticals
+			last := len(rings) - 1
+			edge(m, to3(insets[0][i], rings[0].y), to3(insets[0][j], rings[0].y))
+			edge(m, to3(insets[last][i], rings[last].y), to3(insets[last][j], rings[last].y))
+			if !rounded && !ri.smooth[i] {edge(m, to3(pts[i], 0), to3(pts[i], rings[last].y))}
 		}
 	}
-	walls(m, outer[:], thickness)
-	for h in holes {walls(m, h, thickness)}
+	walls(m, outer[:], rings[:], e > 0)
+	for h in holes {walls(m, h, rings[:], e > 0)}
 }
 
 // Revolves a half profile of (radius, height) points around the local Y axis.

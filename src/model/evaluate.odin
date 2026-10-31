@@ -40,6 +40,8 @@ Eval_Result :: struct {
 	allocator:   mem.Allocator,
 	parts:       [dynamic]Resolved_Part,
 	groups:      [dynamic]Resolved_Group,
+	part_index:  map[Id]int, // id -> index into parts
+	group_index: map[Id]int,
 	error_count: int,
 	initialized: bool,
 }
@@ -200,6 +202,20 @@ evaluate :: proc(d: ^Document, out: ^Eval_Result) {
 	eval_params(&c, doc_scope)
 	walk_group(&c, d.root, doc_scope, 1, 0)
 	out.error_count = c.errors
+	out.part_index = make(map[Id]int, len(out.parts), out.allocator)
+	for rp, i in out.parts {out.part_index[rp.id] = i}
+	out.group_index = make(map[Id]int, len(out.groups), out.allocator)
+	for rg, i in out.groups {out.group_index[rg.id] = i}
+}
+
+find_resolved_part :: proc(r: ^Eval_Result, id: Id) -> ^Resolved_Part {
+	if i, ok := r.part_index[id]; ok {return &r.parts[i]}
+	return nil
+}
+
+find_resolved_group :: proc(r: ^Eval_Result, id: Id) -> ^Resolved_Group {
+	if i, ok := r.group_index[id]; ok {return &r.groups[i]}
+	return nil
 }
 
 @(private)

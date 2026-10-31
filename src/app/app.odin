@@ -199,19 +199,9 @@ refresh :: proc(a: ^App) {
 	}
 }
 
-resolved_part :: proc(a: ^App, id: Id) -> ^model.Resolved_Part {
-	for &rp in a.res.parts {
-		if rp.id == id {return &rp}
-	}
-	return nil
-}
+resolved_part :: proc(a: ^App, id: Id) -> ^model.Resolved_Part {return model.find_resolved_part(&a.res, id)}
 
-resolved_group :: proc(a: ^App, id: Id) -> ^model.Resolved_Group {
-	for &rg in a.res.groups {
-		if rg.id == id {return &rg}
-	}
-	return nil
-}
+resolved_group :: proc(a: ^App, id: Id) -> ^model.Resolved_Group {return model.find_resolved_group(&a.res, id)}
 
 // World matrix of the group that contains `id` (identity for top level).
 parent_world :: proc(a: ^App, id: Id) -> Mat4 {

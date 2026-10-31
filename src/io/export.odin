@@ -122,8 +122,8 @@ csv_quote :: proc(s: string) -> string {
 cut_list_csv :: proc(rows: []Cut_Row, allocator := context.allocator) -> string {
 	b := strings.builder_make(allocator)
 	strings.write_string(&b, "Material,Type,Parts,Qty,Length (mm),Width (mm),Thickness (mm),Shaped,Area per piece (m2),Cost\n")
+	kind := [model.Shape_Kind]string{.Panel = "panel", .Turned = "turned", .Swept = "swept"}
 	for r in rows {
-		kind := [model.Shape_Kind]string{.Panel = "panel", .Turned = "turned", .Swept = "swept"}
 		fmt.sbprintf(&b, "%s,%s,%s,%d,%s,%s,%s,%s,%.3f,%.2f\n", csv_quote(r.material), kind[r.kind], csv_quote(r.names), r.qty,
 			model.format_number(r.length), model.format_number(r.width), model.format_number(r.thickness),
 			r.shaped ? "yes" : "no", r.area_m2, r.cost)

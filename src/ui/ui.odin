@@ -165,7 +165,7 @@ UI :: struct {
 	sim_cmd:        bool,
 	sim_wheel:      Vec2,
 	wheel_v:        Vec2, // scroll this frame (x, y)
-	rects:          map[Id]Rect, // last rect of each button, for tests
+	rects:          map[Id]Rect, // last rect of each control, recorded while simulating input (tests)
 	advance:        [Font_Kind][128]f32,
 }
 
@@ -638,7 +638,7 @@ Button_Style :: enum u8 {
 }
 
 button_rect :: proc(ui: ^UI, bid: Id, r: Rect, text: string, style := Button_Style.Normal, on := false, tip := "", k := Font_Kind.Semibold) -> bool {
-	ui.rects[bid] = r
+	if ui.sim {ui.rects[bid] = r}
 	hov := hovered(ui, r) && is_visible(ui, r)
 	if hov && ui.pressed {ui.active = bid}
 	down := ui.active == bid && ui.down
@@ -694,14 +694,13 @@ checkbox :: proc(ui: ^UI, text: string, v: ^bool) -> bool {
 // Segmented control; returns the (possibly new) index.
 segmented :: proc(ui: ^UI, sid: Id, r: Rect, options: []string, current: int) -> int {
 	rounded(r, 6, THEME.field)
-	cols := columns(inset(r, 2), make([]f32, len(options), context.temp_allocator), 2)
 	out := current
+	n := f32(len(options))
+	cw := (r.width - 4 - 2 * (n - 1)) / n
 	for o, i in options {
-		c := cols[i]
-		c.width = (r.width - 4 - 2 * f32(len(options) - 1)) / f32(len(options))
-		c.x = r.x + 2 + f32(i) * (c.width + 2)
+		c := Rect{r.x + 2 + f32(i) * (cw + 2), r.y + 2, cw, r.height - 4}
 		bid := id_n(sid, i)
-		ui.rects[bid] = c
+		if ui.sim {ui.rects[bid] = c}
 		hov := hovered(ui, c) && is_visible(ui, c)
 		if hov && ui.pressed {ui.active = bid}
 		if hov && ui.released && ui.active == bid {out = i}
@@ -1056,7 +1055,7 @@ draw_popup :: proc(ui: ^UI) {
 	clicked := -1
 	for o, i in p.options {
 		ir := Rect{x + 4, y + 4 + f32(i) * item_h, w - 8, item_h}
-		ui.rects[id_n(p.id, i)] = ir
+		if ui.sim {ui.rects[id_n(p.id, i)] = ir}
 		hov := rl.CheckCollisionPointRec(ui.mouse, ir)
 		if hov {
 			rounded(ir, 5, THEME.accent_soft)
@@ -1130,7 +1129,7 @@ tree_row :: proc(ui: ^UI, rid: Id, depth: int, text: string, sub: string, select
 
 // Horizontal slider; returns the new value and whether it changed this frame.
 slider :: proc(ui: ^UI, sid: Id, r: Rect, value, lo, hi: f32, format := "%.2f") -> (f32, bool) {
-	ui.rects[sid] = r
+	if ui.sim {ui.rects[sid] = r}
 	vis := is_visible(ui, r)
 	val_w: f32 = 54
 	track := Rect{r.x, r.y + r.height * 0.5 - 2, r.width - val_w - 10, 4}

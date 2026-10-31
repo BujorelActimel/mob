@@ -243,10 +243,7 @@ ui_selftest :: proc(a: ^App) -> bool {
 	}
 	// run against default preferences, never touching the user's settings file
 	a.settings_readonly = true
-	dir := a.settings.documents_dir
-	a.settings = DEFAULT_SETTINGS
-	a.settings.documents_dir = dir
-	apply_settings(a)
+	reset_settings(a)
 	a.ui.sim = true
 	a.ui.sim_mouse = {-100, -100}
 	step(a, 3)
@@ -349,8 +346,7 @@ ui_selftest :: proc(a: ^App) -> bool {
 		step(a)
 		check(&all_ok, a.cam.dist_goal == d0, "pinch off: ignored")
 		// mouse preset: scroll zooms again
-		a.settings = DEFAULT_SETTINGS
-		a.settings.documents_dir = dir
+		reset_settings(a)
 		d0 = a.cam.dist_goal
 		a.ui.sim_wheel = {0, 2}
 		step(a)
@@ -368,8 +364,7 @@ ui_selftest :: proc(a: ^App) -> bool {
 		a.ui.sim_down = false
 		step(a)
 		check(&all_ok, linalg.length(a.cam.target_goal - t0) > 1 && a.cam.yaw_goal == y0, "left-drag setting: Pan")
-		a.settings = DEFAULT_SETTINGS
-		a.settings.documents_dir = dir
+		reset_settings(a)
 	}
 	settings_path_override = ""
 

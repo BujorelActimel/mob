@@ -88,6 +88,15 @@ load_settings :: proc(a: ^App) {
 	apply_settings(a)
 }
 
+// Back to defaults, keeping the folder and last project (they're owned strings).
+reset_settings :: proc(a: ^App) {
+	s := &a.settings
+	dir, last := s.documents_dir, s.last_file
+	s^ = DEFAULT_SETTINGS
+	s.documents_dir, s.last_file = dir, last
+	apply_settings(a)
+}
+
 @(private)
 sanitize_settings :: proc(s: ^Settings) {
 	s.zoom_speed = clamp(s.zoom_speed, 0.2, 4)
@@ -259,10 +268,7 @@ settings_panel :: proc(a: ^App, screen: rl.Rectangle) {
 	fr := rl.Rectangle{r.x + 18, r.y + r.height - 46, r.width - 36, 30}
 	cols := ui.columns(fr, {1.2, 1.8, 1})
 	if ui.button_rect(&a.ui, ui.id("set-reset"), cols[0], "Reset to defaults", .Ghost) {
-		dir := s.documents_dir
-		s^ = DEFAULT_SETTINGS
-		s.documents_dir = dir
-		apply_settings(a)
+		reset_settings(a)
 	}
 	if ui.button_rect(&a.ui, ui.id("set-done"), cols[2], "Done", .Primary) {close_settings(a)}
 	if rl.IsKeyPressed(.ESCAPE) && a.ui.focus == 0 {close_settings(a)}

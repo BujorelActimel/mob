@@ -13,17 +13,14 @@ import "../ui"
 // End-to-end checks of app-level editing, run inside a live window
 // (`mob --selftest <dir>`). Exercises commands, undo, push/pull, move,
 // grouping, files and exports against the default corner-shelf document.
+@(private = "file")
+check :: proc(all_ok: ^bool, cond: bool, msg: string, args: ..any) {
+	fmt.println(cond ? "ok   " : "FAIL ", fmt.tprintf(msg, ..args))
+	if !cond {all_ok^ = false}
+}
+
 selftest :: proc(a: ^App, out_dir: string) -> bool {
 	all_ok := true
-	check :: proc(all_ok: ^bool, cond: bool, msg: string, args: ..any) {
-		text := fmt.tprintf(msg, ..args)
-		if cond {
-			fmt.println("ok   ", text)
-		} else {
-			fmt.println("FAIL ", text)
-			all_ok^ = false
-		}
-	}
 	part_named :: proc(a: ^App, name: string) -> ^model.Resolved_Part {
 		for &rp in a.res.parts {if rp.part.name == name {return &rp}}
 		return nil
@@ -56,18 +53,8 @@ selftest :: proc(a: ^App, out_dir: string) -> bool {
 	// 3. push/pull on a shelf's right face: width is `W - t`, so W is edited
 	{
 		rp := part_named(a, "Shelf 1")
-		op := Drag {
-			kind      = .Push_Pull,
-			face      = {valid = true, part = rp.id, axis = 0, sign = 1, world_dir = {1, 0, 0}},
-			coalesce  = new_coalesce_key(a),
-			dim_start = pp_value(rp, 0),
-		}
-		pw := parent_world(a, rp.id)
-		op.local_rot = linalg.inverse(pw) * rp.world
-		op.local_rot[0, 3], op.local_rot[1, 3], op.local_rot[2, 3] = 0, 0, 0
-		m := Moving{id = rp.id, pw_inv = linalg.inverse(pw)}
-		for i in 0 ..< 3 {m.start_pos[i] = rp.part.xf.pos[i].value}
-		append(&op.nodes, m)
+		op: Drag
+		init_push_pull(a, &op, {valid = true, part = rp.id, axis = 0, sign = 1, world_dir = {1, 0, 0}})
 		apply_push_pull(a, &op, 60)
 		apply_push_pull(a, &op, 100) // same drag: one undo step
 		refresh(a)
@@ -76,7 +63,7 @@ selftest :: proc(a: ^App, out_dir: string) -> bool {
 		check(&all_ok, w.field.value == 520, "push/pull edits parameter W -> %v", w.field.value)
 		check(&all_ok, abs(pp_value(part_named(a, "Shelf 3"), 0) - 502) < 1e-3, "other shelves follow (%v)", pp_value(part_named(a, "Shelf 3"), 0))
 		check(&all_ok, abs(pp_value(part_named(a, "Back"), 0) - 520) < 1e-3, "back follows")
-		delete(op.nodes)
+		drag_free(&op)
 		undo(a)
 		g = shelf_group(a)
 		check(&all_ok, model.find_param(g.params[:], "W").field.value == 420, "one undo reverts the whole drag")
@@ -89,23 +76,20 @@ selftest :: proc(a: ^App, out_dir: string) -> bool {
 		apply(a, Cmd_Add_Node{node = p, parent = 0, select = true})
 		refresh(a)
 		rp := part_named(a, "Loose")
-		op := Drag{kind = .Push_Pull, face = {valid = true, part = rp.id, axis = 0, sign = -1, world_dir = {-1, 0, 0}}, coalesce = new_coalesce_key(a), dim_start = 600}
-		op.local_rot = 1
-		m := Moving{id = rp.id, pw_inv = 1, start_pos = {2000, 0, 0}}
-		append(&op.nodes, m)
+		op: Drag
+		init_push_pull(a, &op, {valid = true, part = rp.id, axis = 0, sign = -1, world_dir = {-1, 0, 0}})
 		apply_push_pull(a, &op, 50)
 		refresh(a)
 		rp = part_named(a, "Loose")
 		check(&all_ok, abs(pp_value(rp, 0) - 650) < 1e-3 && abs(origin(rp).x - 1950) < 1e-3, "left-face pull grows to %v and shifts to x=%v", pp_value(rp, 0), origin(rp).x)
-		delete(op.nodes)
+		drag_free(&op)
 		// thickness face
-		op2 := Drag{kind = .Push_Pull, face = {valid = true, part = rp.id, axis = 1, sign = 1, world_dir = {0, 1, 0}}, coalesce = new_coalesce_key(a), dim_start = 18}
-		op2.local_rot = 1
-		append(&op2.nodes, Moving{id = rp.id, pw_inv = 1, start_pos = {1950, 0, 0}})
+		op2: Drag
+		init_push_pull(a, &op2, {valid = true, part = rp.id, axis = 1, sign = 1, world_dir = {0, 1, 0}})
 		apply_push_pull(a, &op2, 7)
 		refresh(a)
 		check(&all_ok, abs(part_named(a, "Loose").thickness - 25) < 1e-3, "top-face pull sets thickness 25")
-		delete(op2.nodes)
+		drag_free(&op2)
 		apply(a, Cmd_Delete{ids = {part_named(a, "Loose").id}})
 		refresh(a)
 	}
@@ -114,7 +98,8 @@ selftest :: proc(a: ^App, out_dir: string) -> bool {
 	{
 		set_selection(a, shelf_group(a).id)
 		op := Drag{kind = .Move_Axis, axis = 0, coalesce = new_coalesce_key(a)}
-		append(&op.nodes, Moving{id = shelf_group(a).id, pw_inv = 1})
+		m, _ := moving_of(a, shelf_group(a).id)
+		append(&op.nodes, m)
 		apply_move(a, &op, {250, 0, 0})
 		refresh(a)
 		check(&all_ok, abs(origin(part_named(a, "Back")).x - 250) < 1e-3, "move group +250 on X")
@@ -216,11 +201,6 @@ selftest :: proc(a: ^App, out_dir: string) -> bool {
 // Clicks real UI controls through simulated mouse input.
 ui_selftest :: proc(a: ^App) -> bool {
 	all_ok := true
-	check :: proc(all_ok: ^bool, cond: bool, msg: string, args: ..any) {
-		text := fmt.tprintf(msg, ..args)
-		fmt.println(cond ? "ok   " : "FAIL ", text)
-		if !cond {all_ok^ = false}
-	}
 	step :: proc(a: ^App, n := 1) {
 		for _ in 0 ..< n {
 			frame(a)

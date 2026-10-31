@@ -72,18 +72,28 @@ Place_Preview :: struct {
 AXIS_COLORS := [3]rl.Color{{226, 76, 70, 255}, {94, 186, 84, 255}, {70, 128, 232, 255}}
 AXIS_DIRS := [3]Vec3{{1, 0, 0}, {0, 1, 0}, {0, 0, 1}}
 
+drag_free :: proc(d: ^Drag) {
+	delete(d.nodes)
+	delete(d.exclude)
+	d^ = {}
+}
+
 clear_last_op :: proc(a: ^App) {
-	delete(a.last_op.nodes)
-	delete(a.last_op.exclude)
-	a.last_op = {}
+	drag_free(&a.last_op)
 	clear(&a.typed)
 }
 
 @(private)
-reset_drag :: proc(a: ^App) {
-	delete(a.drag.nodes)
-	delete(a.drag.exclude)
-	a.drag = {}
+reset_drag :: proc(a: ^App) {drag_free(&a.drag)}
+
+// Snapshot of a node's position for a drag that edits it.
+moving_of :: proc(a: ^App, id: Id) -> (m: Moving, ok: bool) {
+	ref := model.find_node(a.doc, id) or_return
+	if ref.parent == nil {return}
+	xf := model.node_xf(ref.node)
+	m = {id = id, pw_inv = linalg.inverse(parent_world(a, id))}
+	for i in 0 ..< 3 {m.start_pos[i] = xf.pos[i].value}
+	return m, true
 }
 
 // Ends a drag; move/push-pull drags become the target of typed distances.
@@ -91,8 +101,7 @@ reset_drag :: proc(a: ^App) {
 finish_drag :: proc(a: ^App) {
 	#partial switch a.drag.kind {
 	case .Move_Axis, .Move_Plane, .Push_Pull:
-		delete(a.last_op.nodes)
-		delete(a.last_op.exclude)
+		drag_free(&a.last_op)
 		a.last_op = a.drag
 		a.last_op.snapped = false
 		a.drag = {}
@@ -263,12 +272,7 @@ start_move :: proc(a: ^App, kind: Drag_Kind, axis: int, mouse: Vec2) -> bool {
 	a.drag.lo, a.drag.hi, _ = nodes_bounds(a, a.selection[:])
 	collect_parts(a, a.selection[:], &a.drag.exclude)
 	for id in a.selection {
-		ref, found := model.find_node(a.doc, id)
-		if !found || ref.parent == nil {continue}
-		xf := model.node_xf(ref.node)
-		m := Moving{id = id, pw_inv = linalg.inverse(parent_world(a, id))}
-		for i in 0 ..< 3 {m.start_pos[i] = xf.pos[i].value}
-		append(&a.drag.nodes, m)
+		if m, ok := moving_of(a, id); ok {append(&a.drag.nodes, m)}
 	}
 	ray := screen_ray(a, mouse)
 	if kind == .Move_Axis {
@@ -395,30 +399,31 @@ pp_value :: proc(rp: ^model.Resolved_Part, axis: int) -> f64 {
 }
 
 @(private)
-start_push_pull :: proc(a: ^App, f: Face_Hit, mouse: Vec2) {
+// Prepares a push/pull of face `f`; the caller owns `d` (free with drag_free).
+init_push_pull :: proc(a: ^App, d: ^Drag, f: Face_Hit) -> bool {
 	rp := resolved_part(a, f.part)
-	if rp == nil {return}
-	reset_drag(a)
-	d := &a.drag
-	d.kind = .Push_Pull
-	d.face = f
-	d.coalesce = new_coalesce_key(a)
-	d.start_mouse = mouse
-	d.origin = f.point
-	d.start_t = geom.closest_on_line_to_ray(f.point, f.world_dir, screen_ray(a, mouse))
+	if rp == nil {return false}
+	m := moving_of(a, f.part) or_return
+	d^ = {kind = .Push_Pull, face = f, coalesce = new_coalesce_key(a), origin = f.point}
 	d.dim_start = pp_value(rp, f.axis)
-	pw := parent_world(a, f.part)
-	d.local_rot = linalg.inverse(pw) * rp.world
+	// the part's rotation inside its parent
+	d.local_rot = m.pw_inv * rp.world
 	d.local_rot[0, 3], d.local_rot[1, 3], d.local_rot[2, 3] = 0, 0, 0
-	p := rp.part
-	m := Moving{id = p.id, pw_inv = linalg.inverse(pw)}
-	for i in 0 ..< 3 {m.start_pos[i] = p.xf.pos[i].value}
 	append(&d.nodes, m)
-	append(&d.exclude, p.id)
+	append(&d.exclude, f.part)
 	d.lo, d.hi = render.part_world_bounds(&a.r, rp^)
-	if !is_selected(a, p.id) {
+	return true
+}
+
+@(private)
+start_push_pull :: proc(a: ^App, f: Face_Hit, mouse: Vec2) {
+	reset_drag(a)
+	if !init_push_pull(a, &a.drag, f) {return}
+	a.drag.start_mouse = mouse
+	a.drag.start_t = geom.closest_on_line_to_ray(f.point, f.world_dir, screen_ray(a, mouse))
+	if !is_selected(a, f.part) {
 		clear(&a.selection)
-		append(&a.selection, p.id)
+		append(&a.selection, f.part)
 	}
 }
 

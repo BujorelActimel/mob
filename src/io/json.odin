@@ -43,6 +43,7 @@ F_Node :: struct {
 	grain_rot: bool,
 	profile:   F_Profile,
 	thickness: string,
+	edge:      string `json:"edge,omitempty"`,
 	points:    [][3]string,
 	segments:  int,
 	path:      [][3]string,
@@ -132,6 +133,7 @@ to_node :: proc(n: model.Node) -> F_Node {
 			out.type = "panel"
 			out.profile = to_profile(s.profile)
 			out.thickness = s.thickness.src
+			out.edge = s.edge.src
 		case model.Turned:
 			out.type = "turned"
 			out.points = to_points(s.points[:])
@@ -250,7 +252,7 @@ from_node :: proc(d: ^model.Document, fn: F_Node) -> model.Node {
 	}
 	switch fn.type {
 	case "panel":
-		p.shape = model.Panel{profile = from_profile(d, fn.profile), thickness = model.field_make(d, fn.thickness)}
+		p.shape = model.Panel{profile = from_profile(d, fn.profile), thickness = model.field_make(d, fn.thickness), edge = model.field_make(d, fn.edge)}
 	case "turned":
 		p.shape = model.Turned{points = from_points(d, fn.points), segments = fn.segments > 0 ? fn.segments : 32}
 	case "swept":

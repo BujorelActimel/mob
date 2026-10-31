@@ -492,17 +492,13 @@ group_nodes :: proc(a: ^App, ids: []Id) {
 	for id in ids {
 		ref, found := model.find_node(d, id)
 		if !found || ref.parent == nil {continue}
-		// keep the world placement: re-express in the new group's frame (identity
-		// transform inside the same parent), so only reparenting is needed
-		if ref.parent != parent {
-			move_keep_world(a, id, parent)
-			ref, _ = model.find_node(d, id)
-		}
+		// the new group has an identity transform inside `parent`, so nodes from
+		// elsewhere only need re-expressing in that parent's frame
+		if ref.parent != parent {move_keep_world(a, id, parent)}
 		n, _ := model.detach(d, id)
 		append(&g.children, n)
 	}
-	insert_at = min(insert_at, len(parent.children))
-	inject_at(&parent.children, insert_at, model.Node(g))
+	inject_at(&parent.children, min(insert_at, len(parent.children)), model.Node(g))
 	clear(&a.selection)
 	append(&a.selection, g.id)
 }

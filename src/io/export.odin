@@ -22,6 +22,7 @@ Cut_Row :: struct {
 	qty:       int,
 	shaped:    bool, // outline is not a plain rectangle, or has holes
 	edge:      f64, // edge rounding radius (panels)
+	edge_sides: model.Edge_Sides,
 	area_m2:   f64, // per piece, panels
 	length_m:  f64, // per piece, turned / swept stock
 	cost:      f64, // total for the row
@@ -75,6 +76,7 @@ cut_list :: proc(res: ^model.Eval_Result, allocator := context.allocator) -> []C
 			r.width = round1(across)
 			r.thickness = round1(rp.thickness)
 			r.edge = round1(rp.edge)
+			r.edge_sides = rp.edge_sides
 			// corners rounded only because of the edge radius don't make a part "shaped"
 			r.shaped = !geom.contour_is_rect(rp.profile.outer) && !only_edge_rounded(rp) || len(rp.profile.holes) > 0
 			r.area_m2 = f64(u) * f64(v) / 1e6
@@ -104,7 +106,7 @@ cut_list :: proc(res: ^model.Eval_Result, allocator := context.allocator) -> []C
 		}
 		merged := false
 		for &e, i in rows {
-			if e.material == r.material && e.kind == r.kind && e.length == r.length && e.width == r.width && e.thickness == r.thickness && e.shaped == r.shaped && e.edge == r.edge {
+			if e.material == r.material && e.kind == r.kind && e.length == r.length && e.width == r.width && e.thickness == r.thickness && e.shaped == r.shaped && e.edge == r.edge && e.edge_sides == r.edge_sides {
 				e.qty += 1
 				e.cost += r.cost
 				if !slice.contains(names[i][:], rp.part.name) {append(&names[i], rp.part.name)}
@@ -139,14 +141,20 @@ csv_quote :: proc(s: string) -> string {
 	return s
 }
 
+EDGE_SIDE_LABELS := [model.Edge_Sides]string {
+	.Both   = "top and bottom",
+	.Top    = "top only",
+	.Bottom = "bottom only",
+}
+
 cut_list_csv :: proc(rows: []Cut_Row, allocator := context.allocator) -> string {
 	b := strings.builder_make(allocator)
-	strings.write_string(&b, "Material,Type,Parts,Qty,Length (mm),Width (mm),Thickness (mm),Shaped,Edge radius (mm),Area per piece (m2),Cost\n")
+	strings.write_string(&b, "Material,Type,Parts,Qty,Length (mm),Width (mm),Thickness (mm),Shaped,Edge radius (mm),Rounded edges,Area per piece (m2),Cost\n")
 	kind := [model.Shape_Kind]string{.Panel = "panel", .Turned = "turned", .Swept = "swept"}
 	for r in rows {
-		fmt.sbprintf(&b, "%s,%s,%s,%d,%s,%s,%s,%s,%s,%.3f,%.2f\n", csv_quote(r.material), kind[r.kind], csv_quote(r.names), r.qty,
+		fmt.sbprintf(&b, "%s,%s,%s,%d,%s,%s,%s,%s,%s,%s,%.3f,%.2f\n", csv_quote(r.material), kind[r.kind], csv_quote(r.names), r.qty,
 			model.format_number(r.length), model.format_number(r.width), model.format_number(r.thickness),
-			r.shaped ? "yes" : "no", model.format_number(r.edge), r.area_m2, r.cost)
+			r.shaped ? "yes" : "no", model.format_number(r.edge), r.edge > 0 ? EDGE_SIDE_LABELS[r.edge_sides] : "", r.area_m2, r.cost)
 	}
 	return strings.to_string(b)
 }

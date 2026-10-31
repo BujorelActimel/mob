@@ -77,6 +77,7 @@ test_rounded_edges_model :: proc(t: ^testing.T) {
 	p := model.new_panel(d, "Board", "400", "300")
 	panel := &p.shape.(model.Panel)
 	model.field_set(d, &panel.edge, "e")
+	panel.edge_sides = .Bottom
 	q := model.new_panel(d, "Too round", "400", "300", "10")
 	qp := &q.shape.(model.Panel)
 	model.field_set(d, &qp.edge, "8")
@@ -103,7 +104,8 @@ test_rounded_edges_model :: proc(t: ^testing.T) {
 	testing.expect(t, !board.shaped)
 	testing.expect_value(t, board.edge, 3)
 	csv := mobio.cut_list_csv(rows, context.temp_allocator)
-	testing.expect(t, strings.contains(csv, "Edge radius (mm)"))
+	testing.expect(t, strings.contains(csv, "Edge radius (mm),Rounded edges"))
+	testing.expect(t, strings.contains(csv, ",3,bottom only,"))
 
 	data, _ := mobio.marshal_document(d, context.temp_allocator)
 	d2, _ := mobio.unmarshal_document(data)
@@ -112,5 +114,6 @@ test_rounded_edges_model :: proc(t: ^testing.T) {
 	defer model.eval_result_destroy(&res2)
 	model.evaluate(d2, &res2)
 	testing.expect_value(t, res2.parts[0].edge, 3)
+	testing.expect_value(t, res2.parts[0].edge_sides, model.Edge_Sides.Bottom)
 	testing.expect_value(t, res2.parts[0].hash, res.parts[0].hash)
 }

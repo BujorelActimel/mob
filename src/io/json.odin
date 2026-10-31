@@ -44,6 +44,7 @@ F_Node :: struct {
 	profile:   F_Profile,
 	thickness: string,
 	edge:      string `json:"edge,omitempty"`,
+	edge_sides: string `json:"edge_sides,omitempty"`, // "", "top" or "bottom"
 	points:    [][3]string,
 	segments:  int,
 	path:      [][3]string,
@@ -134,6 +135,7 @@ to_node :: proc(n: model.Node) -> F_Node {
 			out.profile = to_profile(s.profile)
 			out.thickness = s.thickness.src
 			out.edge = s.edge.src
+			out.edge_sides = EDGE_SIDES[s.edge_sides]
 		case model.Turned:
 			out.type = "turned"
 			out.points = to_points(s.points[:])
@@ -145,6 +147,12 @@ to_node :: proc(n: model.Node) -> F_Node {
 		}
 	}
 	return out
+}
+
+EDGE_SIDES := [model.Edge_Sides]string {
+	.Both   = "",
+	.Top    = "top",
+	.Bottom = "bottom",
 }
 
 KIND_NAMES := [model.Material_Kind]string {
@@ -252,7 +260,9 @@ from_node :: proc(d: ^model.Document, fn: F_Node) -> model.Node {
 	}
 	switch fn.type {
 	case "panel":
-		p.shape = model.Panel{profile = from_profile(d, fn.profile), thickness = model.field_make(d, fn.thickness), edge = model.field_make(d, fn.edge)}
+		sides := model.Edge_Sides.Both
+		for name, k in EDGE_SIDES {if name != "" && name == fn.edge_sides {sides = k}}
+		p.shape = model.Panel{profile = from_profile(d, fn.profile), thickness = model.field_make(d, fn.thickness), edge = model.field_make(d, fn.edge), edge_sides = sides}
 	case "turned":
 		p.shape = model.Turned{points = from_points(d, fn.points), segments = fn.segments > 0 ? fn.segments : 32}
 	case "swept":

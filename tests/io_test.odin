@@ -1,6 +1,7 @@
 package tests
 
 import "core:strings"
+import "../src/geom"
 import "core:testing"
 import mobio "../src/io"
 import "../src/model"
@@ -65,4 +66,51 @@ test_cut_list_and_svg :: proc(t: ^testing.T) {
 	svg := mobio.panels_svg(&res, ids, context.temp_allocator)
 	testing.expect(t, strings.contains(svg, "width=\"462.000mm\""))
 	testing.expect(t, strings.contains(svg, " A120.000 120.000 0 0 0 "))
+}
+
+@(test)
+test_rounded_edges_model :: proc(t: ^testing.T) {
+	d := model.doc_new()
+	defer model.doc_destroy(d)
+	g := model.new_group(d, "G")
+	model.add_param(d, &g.params, "e", "3")
+	p := model.new_panel(d, "Board", "400", "300")
+	panel := &p.shape.(model.Panel)
+	model.field_set(d, &panel.edge, "e")
+	q := model.new_panel(d, "Too round", "400", "300", "10")
+	qp := &q.shape.(model.Panel)
+	model.field_set(d, &qp.edge, "8")
+	append(&g.children, p, q)
+	append(&d.root.children, g)
+
+	res: model.Eval_Result
+	defer model.eval_result_destroy(&res)
+	model.evaluate(d, &res)
+	testing.expect_value(t, res.error_count, 0)
+	testing.expect_value(t, res.parts[0].edge, 3)
+	testing.expect(t, res.parts[1].edge < 5) // clamped below half the thickness
+	arcs := 0
+	for s in res.parts[0].profile.outer.segs {
+		if a, ok := s.(geom.Arc); ok {
+			arcs += 1
+			testing.expect(t, abs(a.r - 3) < 1e-4)
+		}
+	}
+	testing.expect_value(t, arcs, 4) // corners raised to the edge radius
+
+	rows := mobio.cut_list(&res, context.temp_allocator)
+	board := rows[0].names == "Board" ? rows[0] : rows[1]
+	testing.expect(t, !board.shaped)
+	testing.expect_value(t, board.edge, 3)
+	csv := mobio.cut_list_csv(rows, context.temp_allocator)
+	testing.expect(t, strings.contains(csv, "Edge radius (mm)"))
+
+	data, _ := mobio.marshal_document(d, context.temp_allocator)
+	d2, _ := mobio.unmarshal_document(data)
+	defer model.doc_destroy(d2)
+	res2: model.Eval_Result
+	defer model.eval_result_destroy(&res2)
+	model.evaluate(d2, &res2)
+	testing.expect_value(t, res2.parts[0].edge, 3)
+	testing.expect_value(t, res2.parts[0].hash, res.parts[0].hash)
 }

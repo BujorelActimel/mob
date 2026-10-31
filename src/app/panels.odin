@@ -529,6 +529,7 @@ cut_list_overlay :: proc(a: ^App, area: rl.Rectangle) {
 		c := ui.columns(rr, cols, 8)
 		name := row.names
 		if row.shaped {name = fmt.tprintf("%s (shaped)", name)}
+		if row.edge > 0 {name = fmt.tprintf("%s (edges r%s)", name, model.format_number(row.edge))}
 		ui.text_in(&a.ui, row.material, c[0], .Regular, ui.THEME.text)
 		ui.text_in(&a.ui, name, c[1], .Regular, ui.THEME.text_dim)
 		ui.text_in(&a.ui, fmt.tprintf("%d", row.qty), c[2], .Semibold, ui.THEME.text, .Right)

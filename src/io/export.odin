@@ -21,6 +21,7 @@ Cut_Row :: struct {
 	thickness: f64,
 	qty:       int,
 	shaped:    bool, // outline is not a plain rectangle, or has holes
+	edge:      f64, // edge rounding radius (panels)
 	area_m2:   f64, // per piece, panels
 	length_m:  f64, // per piece, turned / swept stock
 	cost:      f64, // total for the row
@@ -34,6 +35,23 @@ polyline_length :: proc(pts: []geom.Vec2) -> f32 {
 	l: f32
 	for i in 1 ..< len(pts) {l += linalg.length(pts[i] - pts[i - 1])}
 	return l
+}
+
+// True when a rectangle's only arcs are corner fillets no larger than the edge
+// radius, i.e. the outline is a plain rectangle with eased corners.
+@(private)
+only_edge_rounded :: proc(rp: model.Resolved_Part) -> bool {
+	if rp.edge <= 0 {return false}
+	lines, arcs := 0, 0
+	for s in rp.profile.outer.segs {
+		switch v in s {
+		case geom.Line: lines += 1
+		case geom.Arc:
+			if v.r > rp.edge + 1e-3 {return false}
+			arcs += 1
+		}
+	}
+	return lines <= 4 && arcs == 4
 }
 
 cut_list :: proc(res: ^model.Eval_Result, allocator := context.allocator) -> []Cut_Row {
@@ -56,7 +74,9 @@ cut_list :: proc(res: ^model.Eval_Result, allocator := context.allocator) -> []C
 			r.length = round1(along)
 			r.width = round1(across)
 			r.thickness = round1(rp.thickness)
-			r.shaped = !geom.contour_is_rect(rp.profile.outer) || len(rp.profile.holes) > 0
+			r.edge = round1(rp.edge)
+			// corners rounded only because of the edge radius don't make a part "shaped"
+			r.shaped = !geom.contour_is_rect(rp.profile.outer) && !only_edge_rounded(rp) || len(rp.profile.holes) > 0
 			r.area_m2 = f64(u) * f64(v) / 1e6
 			r.cost = r.area_m2 * rp.material.price_m2
 		case .Turned:
@@ -84,7 +104,7 @@ cut_list :: proc(res: ^model.Eval_Result, allocator := context.allocator) -> []C
 		}
 		merged := false
 		for &e, i in rows {
-			if e.material == r.material && e.kind == r.kind && e.length == r.length && e.width == r.width && e.thickness == r.thickness && e.shaped == r.shaped {
+			if e.material == r.material && e.kind == r.kind && e.length == r.length && e.width == r.width && e.thickness == r.thickness && e.shaped == r.shaped && e.edge == r.edge {
 				e.qty += 1
 				e.cost += r.cost
 				if !slice.contains(names[i][:], rp.part.name) {append(&names[i], rp.part.name)}
@@ -121,12 +141,12 @@ csv_quote :: proc(s: string) -> string {
 
 cut_list_csv :: proc(rows: []Cut_Row, allocator := context.allocator) -> string {
 	b := strings.builder_make(allocator)
-	strings.write_string(&b, "Material,Type,Parts,Qty,Length (mm),Width (mm),Thickness (mm),Shaped,Area per piece (m2),Cost\n")
+	strings.write_string(&b, "Material,Type,Parts,Qty,Length (mm),Width (mm),Thickness (mm),Shaped,Edge radius (mm),Area per piece (m2),Cost\n")
 	kind := [model.Shape_Kind]string{.Panel = "panel", .Turned = "turned", .Swept = "swept"}
 	for r in rows {
-		fmt.sbprintf(&b, "%s,%s,%s,%d,%s,%s,%s,%s,%.3f,%.2f\n", csv_quote(r.material), kind[r.kind], csv_quote(r.names), r.qty,
+		fmt.sbprintf(&b, "%s,%s,%s,%d,%s,%s,%s,%s,%s,%.3f,%.2f\n", csv_quote(r.material), kind[r.kind], csv_quote(r.names), r.qty,
 			model.format_number(r.length), model.format_number(r.width), model.format_number(r.thickness),
-			r.shaped ? "yes" : "no", r.area_m2, r.cost)
+			r.shaped ? "yes" : "no", model.format_number(r.edge), r.area_m2, r.cost)
 	}
 	return strings.to_string(b)
 }

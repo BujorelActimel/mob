@@ -30,18 +30,6 @@ void main() {
 SHADOW_FN :: `
 uniform sampler2D shadowMap;
 uniform vec2 shadowTexel;
-float shadowFactor(vec4 lp, float ndl, float spread);
-float shadowFactor9(vec4 lp, float spread) {
-    vec3 p = lp.xyz / lp.w * 0.5 + 0.5;
-    if (p.x < 0.0 || p.x > 1.0 || p.y < 0.0 || p.y > 1.0 || p.z > 1.0) return 1.0;
-    float lit = 0.0;
-    for (int x = -1; x <= 1; x++)
-    for (int y = -1; y <= 1; y++) {
-        float d = texture(shadowMap, p.xy + vec2(x, y) * shadowTexel * spread).r;
-        lit += (p.z - 0.0008 > d) ? 0.0 : 1.0;
-    }
-    return lit / 9.0;
-}
 float shadowFactor(vec4 lp, float ndl, float spread) {
     vec3 p = lp.xyz / lp.w * 0.5 + 0.5;
     if (p.x < 0.0 || p.x > 1.0 || p.y < 0.0 || p.y > 1.0 || p.z > 1.0) return 1.0;
@@ -199,7 +187,7 @@ void main() {
     }
     float hc = heightAt(xz);
     float ao = 1.0 - 0.55 * (occ / float(N)) - 0.25 * (1.0 - smoothstep(0.0, 25.0, hc));
-    float sh = shadowFactor9(lightVP * vec4(worldPos, 1.0), 2.6);
+    float sh = shadowFactor(lightVP * vec4(worldPos, 1.0), 1.0, 2.0);
     vec3 col = groundColor * (0.72 + 0.28 * sh) * clamp(ao, 0.0, 1.0);
     if (showGrid > 0.5) {
         float minor = gridLine(xz, 100.0, 1.0);

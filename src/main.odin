@@ -203,7 +203,7 @@ run_bench :: proc(a: ^app.App, copies: int) {
 	cpu_max: f64
 	parts_t: [4]f32
 	t0 := rl.GetTime()
-	for i in 0 ..< N {
+	for _ in 0 ..< N {
 		// orbit a little so every frame redraws for real
 		a.cam.yaw_goal += 0.01
 		app.frame(a)
@@ -211,7 +211,6 @@ run_bench :: proc(a: ^app.App, copies: int) {
 		cpu_max = max(cpu_max, f64(a.frame_ms))
 		parts_t += a.timings
 		free_all(context.temp_allocator)
-		_ = i
 	}
 	wall := (rl.GetTime() - t0) * 1000 / N
 	// time a full re-evaluation + mesh sync (what an edit costs)

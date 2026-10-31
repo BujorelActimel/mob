@@ -575,23 +575,17 @@ euler_xyz_from_matrix :: proc(m: Mat4) -> Vec3 {
 		l := linalg.length(Vec3{r[0, c], r[1, c], r[2, c]})
 		if l > 0 {for k in 0 ..< 3 {r[k, c] /= l}}
 	}
-	sy := -r[2, 0]
-	sy = clamp(sy, -1, 1)
-	y := asin_f32(sy)
+	sy := clamp(-r[2, 0], -1, 1)
+	y := math.asin(sy)
 	x, z: f32
 	if abs(sy) < 0.9999 {
-		x = atan2_f32(r[2, 1], r[2, 2])
-		z = atan2_f32(r[1, 0], r[0, 0])
+		x = math.atan2(r[2, 1], r[2, 2])
+		z = math.atan2(r[1, 0], r[0, 0])
 	} else {
-		x = atan2_f32(-r[1, 2], r[1, 1])
-		z = 0
+		x = math.atan2(-r[1, 2], r[1, 1]) // gimbal lock: fold Z into X
 	}
-	deg :: 180.0 / 3.14159265358979
-	out := Vec3{x, y, z} * deg
-	for &v in out {
-		v = f32(int(v * 1000 + (v >= 0 ? 0.5 : -0.5))) / 1000
-		if v == -0 {v = 0}
-	}
+	out := Vec3{x, y, z} * math.DEG_PER_RAD
+	for &v in out {v = math.round(v * 1000) / 1000 + 0} // + 0 turns -0 into 0
 	return out
 }
 
@@ -794,10 +788,6 @@ update_title :: proc(a: ^App) {
 // ---------------------------------------------------------------------------
 // small math helpers
 
-@(private)
-asin_f32 :: proc(x: f32) -> f32 {return math.asin(x)}
-@(private)
-atan2_f32 :: proc(y, x: f32) -> f32 {return math.atan2(y, x)}
 
 screen_ray :: proc(a: ^App, p: Vec2) -> geom.Ray {
 	r := rl.GetScreenToWorldRay(p, orbit_camera(&a.cam))

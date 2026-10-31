@@ -130,7 +130,7 @@ template_table :: proc(d: ^Document) -> ^Group {
 	append(&g.children, top)
 
 	legs := [][2]string{{"inset", "-inset"}, {"W - inset", "-inset"}, {"W - inset", "-(D - inset)"}, {"inset", "-(D - inset)"}}
-	for xz, i in legs {
+	for xz in legs {
 		leg := new_part(d, "Leg")
 		t := Turned{segments = 40, points = make([dynamic]Sketch_Point, d.allocator)}
 		prof := [][3]string{{"16", "0", "3"}, {"18", "L*0.15", "0"}, {"24", "L*0.15 + 10", "0"}, {"24", "L*0.15 + 30", "0"}, {"20", "L*0.15 + 40", "0"}, {"26", "L - 60", "0"}, {"26", "L", "0"}}
@@ -141,7 +141,6 @@ template_table :: proc(d: ^Document) -> ^Group {
 		if len(d.materials) > 1 {leg.material = d.materials[1].id}
 		set_xf(d, &leg.xf, xz[0], "0", xz[1])
 		append(&g.children, leg)
-		_ = i
 	}
 	return g
 }

@@ -8,7 +8,6 @@ import "core:path/filepath"
 import "core:slice"
 import "core:strings"
 import rl "vendor:raylib"
-import "../geom"
 import mobio "../io"
 import "../model"
 import "../render"
@@ -499,7 +498,6 @@ help_overlay :: proc(a: ^App, screen: rl.Rectangle) {
 	}
 	w: f32 = 720
 	h: f32 = 70 + f32(len(rows)) * 28
-	_ = h
 	r := rl.Rectangle{screen.x + (screen.width - w) * 0.5, screen.y + (screen.height - h) * 0.5, w, h}
 	ui.shadowed_card(r, 14, {30, 32, 37, 248})
 	ui.block(&a.ui, r)
@@ -714,6 +712,4 @@ draw_drag_readout :: proc(a: ^App) {
 	dim_label(a, a.ui.mouse + {0, 30}, text, true)
 }
 
-@(private)
-_unused_geom :: geom.Vec2
 

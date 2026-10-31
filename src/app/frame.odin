@@ -1,6 +1,5 @@
 package app
 
-import "core:math"
 import rl "vendor:raylib"
 import rlgl "vendor:raylib/rlgl"
 import "../render"
@@ -113,8 +112,6 @@ frame :: proc(a: ^App) -> bool {
 	return animating || a.ui.animating || busy || len(a.toasts) > 0 || a.need_eval
 }
 
-@(private)
-_m :: math.PI
 
 
 // Screen rectangle covering the selected and hovered parts, plus room for the outline.

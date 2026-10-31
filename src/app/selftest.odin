@@ -294,10 +294,9 @@ ui_selftest :: proc(a: ^App) -> bool {
 		step(a, 2)
 		a.ui.sim_down = true
 		step(a)
-		for k in 1 ..= 10 {
+		for _ in 1 ..= 10 {
 			a.ui.sim_mouse += {8, 3}
 			step(a)
-			_ = k
 		}
 		a.ui.sim_down = false
 		step(a)

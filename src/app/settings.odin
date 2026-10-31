@@ -3,7 +3,6 @@ package app
 import "core:encoding/json"
 import "core:fmt"
 import "core:os"
-import "core:path/filepath"
 import "core:strings"
 import rl "vendor:raylib"
 import "../platform"
@@ -169,7 +168,6 @@ settings_panel :: proc(a: ^App, screen: rl.Rectangle) {
 		ui.text_in(&a.ui, text, {row.x, row.y, label_w - 10, row.height}, .Regular, ui.THEME.text_dim)
 		return {row.x + label_w, row.y, row.width - label_w, row.height}
 	}
-	changed := false
 
 	ui.heading(&a.ui, "Navigation")
 	{
@@ -187,54 +185,52 @@ settings_panel :: proc(a: ^App, screen: rl.Rectangle) {
 				s.left_drag = .Orbit
 			case .Custom:
 			}
-			changed = true
 		}
 	}
 	{
 		r2 := row_label(a, "Scroll / two-finger swipe")
 		v := ui.segmented(&a.ui, ui.id("set-scroll"), r2, {"Zoom", "Pan"}, int(s.scroll))
-		if v != int(s.scroll) {s.scroll = Scroll_Action(v); changed = true}
+		if v != int(s.scroll) {s.scroll = Scroll_Action(v)}
 	}
 	hint := s.scroll == .Pan ? "Cmd + scroll zooms." : "Shift + scroll pans."
 	ui.label(&a.ui, hint, .Small, ui.THEME.text_faint, 14)
 	if platform.has_pinch() {
-		if ui.checkbox(&a.ui, "Pinch to zoom (trackpad)", &s.pinch_zoom) {changed = true}
+		ui.checkbox(&a.ui, "Pinch to zoom (trackpad)", &s.pinch_zoom)
 	}
 	{
 		r2 := row_label(a, "Left-drag on empty space")
 		v := ui.segmented(&a.ui, ui.id("set-ldrag"), r2, {"Orbit", "Pan"}, int(s.left_drag))
-		if v != int(s.left_drag) {s.left_drag = Drag_Action(v); changed = true}
+		if v != int(s.left_drag) {s.left_drag = Drag_Action(v)}
 	}
 	ui.label(&a.ui, "Shift + drag does the other one. Right-drag always orbits.", .Small, ui.THEME.text_faint, 14)
-	if ui.checkbox(&a.ui, "Zoom toward the cursor", &s.zoom_to_cursor) {changed = true}
-	if ui.checkbox(&a.ui, "Invert zoom direction", &s.invert_zoom) {changed = true}
-	if ui.checkbox(&a.ui, "Smooth camera motion", &s.smooth_camera) {changed = true}
-	if v, ok := ui.slider(&a.ui, ui.id("set-zs"), row_label(a, "Zoom speed"), s.zoom_speed, 0.2, 4, "%.1f×"); ok {s.zoom_speed = v; changed = true}
-	if v, ok := ui.slider(&a.ui, ui.id("set-os"), row_label(a, "Orbit speed"), s.orbit_speed, 0.2, 4, "%.1f×"); ok {s.orbit_speed = v; changed = true}
-	if v, ok := ui.slider(&a.ui, ui.id("set-ps"), row_label(a, "Pan speed"), s.pan_speed, 0.2, 4, "%.1f×"); ok {s.pan_speed = v; changed = true}
+	ui.checkbox(&a.ui, "Zoom toward the cursor", &s.zoom_to_cursor)
+	ui.checkbox(&a.ui, "Invert zoom direction", &s.invert_zoom)
+	ui.checkbox(&a.ui, "Smooth camera motion", &s.smooth_camera)
+	if v, ok := ui.slider(&a.ui, ui.id("set-zs"), row_label(a, "Zoom speed"), s.zoom_speed, 0.2, 4, "%.1f×"); ok {s.zoom_speed = v}
+	if v, ok := ui.slider(&a.ui, ui.id("set-os"), row_label(a, "Orbit speed"), s.orbit_speed, 0.2, 4, "%.1f×"); ok {s.orbit_speed = v}
+	if v, ok := ui.slider(&a.ui, ui.id("set-ps"), row_label(a, "Pan speed"), s.pan_speed, 0.2, 4, "%.1f×"); ok {s.pan_speed = v}
 	if v, ok := ui.slider(&a.ui, ui.id("set-fov"), row_label(a, "Field of view"), s.fov, 15, 70, "%.0f°"); ok {
 		s.fov = v
 		a.cam.fovy = v
-		changed = true
 	}
 
 	ui.heading(&a.ui, "Snapping")
-	if ui.checkbox(&a.ui, "Snap to other parts (Opt flips it while dragging)", &s.object_snap) {changed = true}
+	ui.checkbox(&a.ui, "Snap to other parts (Opt flips it while dragging)", &s.object_snap)
 	{
 		r2 := row_label(a, "Grid step (Cmd = ×10)")
 		steps := []f32{1, 5, 10}
 		cur := 0
 		for st, i in steps {if st == s.grid_step {cur = i}}
 		v := ui.segmented(&a.ui, ui.id("set-grid"), r2, {"1 mm", "5 mm", "10 mm"}, cur)
-		if v != cur {s.grid_step = steps[v]; changed = true}
+		if v != cur {s.grid_step = steps[v]}
 	}
-	if v, ok := ui.slider(&a.ui, ui.id("set-snap"), row_label(a, "Snap distance"), s.snap_distance, 2, 30, "%.0f px"); ok {s.snap_distance = v; changed = true}
+	if v, ok := ui.slider(&a.ui, ui.id("set-snap"), row_label(a, "Snap distance"), s.snap_distance, 2, 30, "%.0f px"); ok {s.snap_distance = v}
 
 	ui.heading(&a.ui, "Display")
-	if ui.checkbox(&a.ui, "Outline edges", &a.show_edges) {changed = true}
-	if ui.checkbox(&a.ui, "Floor grid", &a.show_grid) {changed = true}
-	if ui.checkbox(&a.ui, "Dimension lines on the selection", &a.show_dims) {changed = true}
-	if ui.checkbox(&a.ui, "Room backdrop (R)", &a.show_room) {changed = true}
+	ui.checkbox(&a.ui, "Outline edges", &a.show_edges)
+	ui.checkbox(&a.ui, "Floor grid", &a.show_grid)
+	ui.checkbox(&a.ui, "Dimension lines on the selection", &a.show_dims)
+	ui.checkbox(&a.ui, "Room backdrop (R)", &a.show_room)
 
 	ui.heading(&a.ui, "Files")
 	{
@@ -244,10 +240,9 @@ settings_panel :: proc(a: ^App, screen: rl.Rectangle) {
 			delete(s.documents_dir)
 			s.documents_dir = strings.clone(strings.trim_space(res.text))
 			apply_settings(a)
-			changed = true
 		}
 	}
-	if ui.checkbox(&a.ui, "Reopen the last project on start", &s.reopen_last) {changed = true}
+	ui.checkbox(&a.ui, "Reopen the last project on start", &s.reopen_last)
 	ui.space(&a.ui, 4)
 	if ui.button(&a.ui, "Keyboard shortcuts   K", .Normal) {
 		close_settings(a)
@@ -268,11 +263,8 @@ settings_panel :: proc(a: ^App, screen: rl.Rectangle) {
 		s^ = DEFAULT_SETTINGS
 		s.documents_dir = dir
 		apply_settings(a)
-		changed = true
 	}
 	if ui.button_rect(&a.ui, ui.id("set-done"), cols[2], "Done", .Primary) {close_settings(a)}
 	if rl.IsKeyPressed(.ESCAPE) && a.ui.focus == 0 {close_settings(a)}
 	if a.ui.pressed && !rl.CheckCollisionPointRec(a.ui.mouse, r) && a.ui.popup.id == 0 {close_settings(a)}
-	_ = changed
-	_ = filepath.SEPARATOR
 }

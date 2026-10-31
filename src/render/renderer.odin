@@ -3,7 +3,6 @@
 package render
 
 import "core:hash"
-import "core:math"
 import "core:math/linalg"
 import rl "vendor:raylib"
 import rlgl "vendor:raylib/rlgl"
@@ -596,6 +595,5 @@ clip_planes :: proc(r: ^Renderer, cam_pos: Vec3) -> (near, far: f32) {
 	far = d + rad * 8 + 20000
 	near = max(1, (d - rad * 2) * 0.05)
 	near = min(near, 50)
-	_ = math.PI
 	return
 }

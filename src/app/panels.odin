@@ -590,10 +590,57 @@ dim_line :: proc(a: ^App, p0, p1: Vec3, offset_dir: Vec3, offset_px: f32, value:
 	dim_label(a, (a0 + a1) * 0.5, model.format_number(f64(math.round(value * 10) / 10)))
 }
 
+// Clear vertical gaps between stacked flat panels (shelves): every gap inside a
+// selected group, or the gaps above and below a selected shelf.
+@(private)
+draw_gaps :: proc(a: ^App, selected: Id, cam: rl.Camera3D) {
+	scope := selected
+	focus := Id(0)
+	if model.find_part(a.doc, selected) != nil {
+		ref, _ := model.find_node(a.doc, selected)
+		if ref.parent == nil {return}
+		scope = ref.parent.id
+		focus = selected
+	}
+	ids := make([dynamic]Id, context.temp_allocator)
+	collect_parts(a, {scope}, &ids)
+	Flat :: struct {
+		id:     Id,
+		lo, hi: Vec3,
+	}
+	flats := make([dynamic]Flat, context.temp_allocator)
+	for id in ids {
+		rp := resolved_part(a, id)
+		if rp == nil || rp.kind != .Panel {continue}
+		size := rp.world_hi - rp.world_lo
+		if size.y * 2 > min(size.x, size.z) {continue} // not lying flat
+		append(&flats, Flat{id, rp.world_lo, rp.world_hi})
+	}
+	slice.sort_by(flats[:], proc(x, y: Flat) -> bool {return x.lo.y < y.lo.y})
+	for f, i in flats {
+		// nearest flat panel above that overlaps this one in plan
+		for g in flats[i + 1:] {
+			if g.lo.y < f.hi.y - 0.5 {continue}
+			x0, x1 := max(f.lo.x, g.lo.x), min(f.hi.x, g.hi.x)
+			z0, z1 := max(f.lo.z, g.lo.z), min(f.hi.z, g.hi.z)
+			if x1 - x0 < 1 || z1 - z0 < 1 {continue}
+			if focus == 0 || focus == f.id || focus == g.id {
+				// down the middle of the open front
+				x := (x0 + x1) * 0.5
+				p0 := Vec3{x, f.hi.y, z1}
+				p1 := Vec3{x, g.lo.y, z1}
+				dim_line(a, p0, p1, {0, 0, 1}, 0, g.lo.y - f.hi.y, cam)
+			}
+			break
+		}
+	}
+}
+
 draw_dimensions :: proc(a: ^App) {
 	if !a.show_dims || len(a.selection) != 1 || a.editor.open {return}
 	id := a.selection[0]
 	cam := orbit_camera(&a.cam)
+	draw_gaps(a, id, cam)
 	world: Mat4
 	lo, hi: Vec3
 	if rp := resolved_part(a, id); rp != nil {

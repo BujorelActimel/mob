@@ -513,27 +513,24 @@ document_inspector :: proc(a: ^App) {
 
 @(private)
 material_number :: proc(a: ^App, r: rl.Rectangle, wid: ui.Id, label: string, v: ^f64) {
+	Set :: struct {
+		p: ^f64,
+		v: f64,
+	}
+	set :: proc(a: ^App, raw: rawptr) {s := (^Set)(raw); s.p^ = s.v}
 	res := ui.text_field(&a.ui, wid, r, model.format_number(v^), {label = label, scrub = true, value = v^, scrub_step = 1})
 	if res.committed {
 		if x, ok := model.parse_number(res.text); ok && x >= 0 {
-			Num :: struct {
-				p: ^f64,
-				v: f64,
-			}
-			n := Num{v, x}
-			apply(a, Cmd_Custom{fn = proc(a: ^App, raw: rawptr) {x := (^Num)(raw); x.p^ = x.v}, data = &n})
+			s := Set{v, x}
+			apply(a, Cmd_Custom{fn = set, data = &s})
 		} else {
 			toast(a, "Not a number", .Error)
 		}
 	}
 	if res.scrubbing && res.value != v^ && res.value >= 0 {
 		if res.scrub_start {a.scrub_key = new_coalesce_key(a)}
-		Num :: struct {
-			p: ^f64,
-			v: f64,
-		}
-		n := Num{v, res.value}
-		apply(a, Cmd_Custom{fn = proc(a: ^App, raw: rawptr) {x := (^Num)(raw); x.p^ = x.v}, data = &n}, a.scrub_key)
+		s := Set{v, res.value}
+		apply(a, Cmd_Custom{fn = set, data = &s}, a.scrub_key)
 	}
 }
 

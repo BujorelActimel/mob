@@ -185,6 +185,7 @@ rewrite_refs :: proc(a: ^App, old, new: string) {
 				case model.Panel:
 					visit_profile(a, &s.profile, old, new)
 					rewrite_field(a, &s.thickness, old, new)
+					rewrite_field(a, &s.edge, old, new)
 				case model.Turned:
 					for &q in s.points {
 						rewrite_field(a, &q.x, old, new)
@@ -408,10 +409,11 @@ part_inspector :: proc(a: ^App, p: ^model.Part) {
 		ph := mat != nil ? fmt.tprintf("%s", model.format_number(mat.thickness)) : ""
 		if s.profile.kind == .Rect {
 			field_row(a, owner, "size", {"W", "D", "T"}, {&s.profile.w, &s.profile.h, &s.thickness}, {"", "", ph})
+			field_row(a, owner, "edge", {"Rounded edges"}, {&s.edge}, {"0"})
 			ui.heading(&a.ui, "Corner radii")
 			field_row(a, owner, "radii", {"FL", "FR", "BR", "BL"}, {&s.profile.radii[.Front_Left], &s.profile.radii[.Front_Right], &s.profile.radii[.Back_Right], &s.profile.radii[.Back_Left]})
 		} else {
-			field_row(a, owner, "thick", {"T"}, {&s.thickness}, {ph})
+			field_row(a, owner, "thick", {"T", "Edges"}, {&s.thickness, &s.edge}, {ph, "0"})
 			ui.label(&a.ui, fmt.tprintf("Free outline · %d points", len(s.profile.points)), .Regular, ui.THEME.text_dim)
 		}
 		if ui.button(&a.ui, "Edit outline   E", .Normal, "Open the 2D outline editor") {open_editor(a, p.id)}

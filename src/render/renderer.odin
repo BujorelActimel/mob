@@ -67,15 +67,21 @@ Renderer :: struct {
 	has_scene:    bool,
 }
 
+Part_Flag :: enum u8 {
+	Selected,
+	Hovered,
+	Ghost, // drawn dimmed, e.g. while editing its outline
+}
+Part_Flags :: bit_set[Part_Flag;u8]
+
 Frame :: struct {
-	camera:     rl.Camera3D,
-	near, far:  f32,
-	selected:   []model.Id,
-	hover:      []model.Id,
-	show_edges: bool,
-	show_grid:  bool,
-	show_room:  bool,
-	ghost:      []model.Id, // parts drawn dimmed (e.g. while editing a profile)
+	camera:      rl.Camera3D,
+	near, far:   f32,
+	flags:       []Part_Flags, // one per res.parts entry
+	highlighted: bool, // any part selected or hovered
+	show_edges:  bool,
+	show_grid:   bool,
+	show_room:   bool,
 }
 
 @(private)
@@ -391,23 +397,17 @@ ensure_mask :: proc(r: ^Renderer) {
 	r.mask_w, r.mask_h = w, h
 }
 
-@(private)
-contains :: proc(ids: []model.Id, id: model.Id) -> bool {
-	for x in ids {if x == id {return true}}
-	return false
-}
-
 // Selection / hover mask, rendered before the main pass.
 draw_mask :: proc(r: ^Renderer, res: ^model.Eval_Result, f: Frame) {
 	ensure_mask(r)
 	rl.BeginTextureMode(r.mask)
 	rl.ClearBackground({0, 0, 0, 0})
-	if len(f.selected) > 0 || len(f.hover) > 0 {
+	if f.highlighted {
 		rlgl.SetClipPlanes(f64(f.near), f64(f.far))
 		rl.BeginMode3D(f.camera)
-		for rp in res.parts {
-			sel := contains(f.selected, rp.id)
-			hov := contains(f.hover, rp.id)
+		for rp, i in res.parts {
+			sel := .Selected in f.flags[i]
+			hov := .Hovered in f.flags[i]
 			if !sel && !hov {continue}
 			g := mesh_of(r, rp)
 			if g == nil || g.mesh.vaoId == 0 {continue}
@@ -491,7 +491,7 @@ draw_scene :: proc(r: ^Renderer, res: ^model.Eval_Result, f: Frame) {
 	rl.SetShaderValue(r.wood, wl.light_dir, &ld, .VEC3)
 	rl.SetShaderValue(r.wood, wl.view_pos, &view_pos, .VEC3)
 	rlgl.DisableBackfaceCulling() // open shapes / mirrored transforms stay visible
-	for rp in res.parts {
+	for rp, i in res.parts {
 		g := mesh_of(r, rp)
 		if g == nil || g.mesh.vaoId == 0 {continue}
 		kind := i32(rp.material.kind)
@@ -502,7 +502,7 @@ draw_scene :: proc(r: ^Renderer, res: ^model.Eval_Result, f: Frame) {
 		rl.SetShaderValue(r.wood, wl.seed, &seed, .FLOAT)
 		tint := [4]f32{0, 0, 0, 0}
 		if rp.errors > 0 {tint = {0.9, 0.2, 0.15, 0.35}}
-		if contains(f.ghost, rp.id) {tint = {0.95, 0.95, 0.95, 0.6}}
+		if .Ghost in f.flags[i] {tint = {0.95, 0.95, 0.95, 0.6}}
 		rl.SetShaderValue(r.wood, wl.tint, &tint, .VEC4)
 		r.wood_mat.maps[0].color = color_of(rp.material.color)
 		rl.DrawMesh(g.mesh, r.wood_mat, rl.Matrix(rp.world))

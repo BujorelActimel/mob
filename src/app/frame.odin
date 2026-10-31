@@ -50,18 +50,24 @@ frame :: proc(a: ^App) -> bool {
 	near, far := render.clip_planes(&a.r, cam.position)
 	sel_parts := make([dynamic]Id, context.temp_allocator)
 	collect_parts(a, a.selection[:], &sel_parts)
-	ghost: []Id
-	if a.editor.open {ghost = {a.editor.part}}
+	flags := make([]render.Part_Flags, len(a.res.parts), context.temp_allocator)
+	mark :: proc(a: ^App, flags: []render.Part_Flags, ids: []Id, flag: render.Part_Flag) {
+		for id in ids {
+			if i, ok := a.res.part_index[id]; ok {flags[i] += {flag}}
+		}
+	}
+	mark(a, flags, sel_parts[:], .Selected)
+	mark(a, flags, a.hover_ids[:], .Hovered)
+	if a.editor.open {mark(a, flags, {a.editor.part}, .Ghost)}
 	f := render.Frame {
-		camera     = cam,
-		near       = near,
-		far        = far,
-		selected   = sel_parts[:],
-		hover      = a.hover_ids[:],
-		show_edges = a.show_edges,
-		show_grid  = a.show_grid,
-		show_room  = a.show_room,
-		ghost      = ghost,
+		camera      = cam,
+		near        = near,
+		far         = far,
+		flags       = flags,
+		highlighted = len(sel_parts) > 0 || len(a.hover_ids) > 0,
+		show_edges  = a.show_edges,
+		show_grid   = a.show_grid,
+		show_room   = a.show_room,
 	}
 	render.draw_mask(&a.r, &a.res, f)
 	t_mask := rl.GetTime()

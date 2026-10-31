@@ -409,11 +409,12 @@ part_inspector :: proc(a: ^App, p: ^model.Part) {
 		ph := mat != nil ? fmt.tprintf("%s", model.format_number(mat.thickness)) : ""
 		if s.profile.kind == .Rect {
 			field_row(a, owner, "size", {"W", "D", "T"}, {&s.profile.w, &s.profile.h, &s.thickness}, {"", "", ph})
-			field_row(a, owner, "edge", {"Rounded edges"}, {&s.edge}, {"0"})
+			edge_rows(a, owner, &s)
 			ui.heading(&a.ui, "Corner radii")
 			field_row(a, owner, "radii", {"FL", "FR", "BR", "BL"}, {&s.profile.radii[.Front_Left], &s.profile.radii[.Front_Right], &s.profile.radii[.Back_Right], &s.profile.radii[.Back_Left]})
 		} else {
-			field_row(a, owner, "thick", {"T", "Edges"}, {&s.thickness, &s.edge}, {ph, "0"})
+			field_row(a, owner, "thick", {"T"}, {&s.thickness}, {ph})
+			edge_rows(a, owner, &s)
 			ui.label(&a.ui, fmt.tprintf("Free outline · %d points", len(s.profile.points)), .Regular, ui.THEME.text_dim)
 		}
 		if ui.button(&a.ui, "Edit outline   E", .Normal, "Open the 2D outline editor") {open_editor(a, p.id)}
@@ -472,6 +473,24 @@ part_inspector :: proc(a: ^App, p: ^model.Part) {
 		if ui.button(&a.ui, fmt.tprintf("Select %s", g.name), .Ghost) {
 			set_selection(a, g.id)
 		}
+	}
+}
+
+// Edge radius, plus which faces get it once a radius is set.
+@(private)
+edge_rows :: proc(a: ^App, owner: Id, s: ^model.Panel) {
+	field_row(a, owner, "edge", {"Rounded edges"}, {&s.edge}, {"0"})
+	if s.edge.value <= 0 && model.field_is_literal(s.edge) {return}
+	r := ui.next_row(&a.ui, 28)
+	cur := int(s.edge_sides)
+	sel := ui.segmented(&a.ui, fid(owner, "edge-sides"), r, {"Top & bottom", "Top", "Bottom"}, cur)
+	if sel != cur {
+		Sides :: struct {
+			p: ^model.Panel,
+			v: model.Edge_Sides,
+		}
+		x := Sides{s, model.Edge_Sides(sel)}
+		apply(a, Cmd_Custom{fn = proc(a: ^App, raw: rawptr) {v := (^Sides)(raw); v.p.edge_sides = v.v}, data = &x})
 	}
 }
 

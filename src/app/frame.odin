@@ -70,7 +70,7 @@ frame :: proc(a: ^App) -> bool {
 	rl.BeginDrawing()
 	render.draw_background()
 	render.draw_scene(&a.r, &a.res, f)
-	if (len(sel_parts) > 0 || len(a.hover_ids) > 0) && !bench_no_outline {
+	if len(sel_parts) > 0 || len(a.hover_ids) > 0 {
 		render.draw_outline(&a.r, a.ui.dpi, outline_area(a, sel_parts[:], cam))
 	}
 	t_3d := rl.GetTime()
@@ -79,17 +79,10 @@ frame :: proc(a: ^App) -> bool {
 	draw_tool_feedback_3d(a)
 	draw_gizmo(a)
 	rl.EndMode3D()
-	if !bench_no_dims {draw_dimensions(a)}
+	draw_dimensions(a)
 	draw_drag_readout(a)
 
 	// ---- UI
-	if a.bench_no_ui {
-		ui.end_frame(&a.ui)
-		a.frame_ms = f32((rl.GetTime() - t0) * 1000)
-		a.timings = {f32((t_in - t0) * 1000), f32((t_mask - t_in) * 1000), f32((t_3d - t_mask) * 1000), f32((rl.GetTime() - t_3d) * 1000)}
-		rl.EndDrawing()
-		return true
-	}
 	a.ui.input_enabled = !modal
 	if len(a.res.parts) == 0 && !a.editor.open {empty_hint(a, center)}
 	file_bar(a, {left.x, left.y, LEFT_W, TOP_H})
@@ -123,8 +116,6 @@ frame :: proc(a: ^App) -> bool {
 @(private)
 _m :: math.PI
 
-bench_no_outline: bool
-bench_no_dims: bool
 
 // Screen rectangle covering the selected and hovered parts, plus room for the outline.
 @(private)

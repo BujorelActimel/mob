@@ -194,11 +194,6 @@ run_bench :: proc(a: ^app.App, copies: int) {
 	parts := len(a.res.parts)
 	// warm up, then select one group so the outline pass runs
 	app.set_selection(a, model.node_id(d.root.children[0]))
-	if os.get_env("MOB_NO_EDGES", context.temp_allocator) != "" {a.show_edges = false}
-	if os.get_env("MOB_NO_SEL", context.temp_allocator) != "" {app.set_selection(a)}
-	if os.get_env("MOB_NO_UI", context.temp_allocator) != "" {a.bench_no_ui = true}
-	if os.get_env("MOB_NO_OUTLINE", context.temp_allocator) != "" {app.bench_no_outline = true}
-	if os.get_env("MOB_NO_DIMS", context.temp_allocator) != "" {app.bench_no_dims = true}
 	for _ in 0 ..< 30 {
 		app.frame(a)
 		free_all(context.temp_allocator)

@@ -118,7 +118,6 @@ App :: struct {
 	settings:       Settings,
 	docs_dir_for_tests: string,
 	settings_readonly: bool,
-	bench_no_ui:    bool,
 	rot_open:       Id, // node whose rotation fields are expanded
 	show_settings:  bool,
 }

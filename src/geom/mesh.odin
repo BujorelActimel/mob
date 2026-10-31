@@ -142,10 +142,10 @@ inset_ring :: proc(pts: []Vec2, ri: Ring_Info, d: f32, allocator := context.temp
 	return out
 }
 
-// Extrudes along +Y by `thickness`. With `edge_r` > 0 the top and bottom
-// perimeter edges are rounded with that radius (the outline should already
-// have corner radii >= edge_r so the vertical corners blend in).
-extrude_profile :: proc(prof: Profile2D, thickness: f32, tol: f32, m: ^Mesh_Data, edge_r: f32 = 0) {
+// Extrudes along +Y by `thickness`. `edge_bottom` / `edge_top` round the
+// perimeter edges of the bottom and top faces (the outline should already have
+// corner radii >= the larger one so the vertical corners blend in).
+extrude_profile :: proc(prof: Profile2D, thickness: f32, tol: f32, m: ^Mesh_Data, edge_bottom: f32 = 0, edge_top: f32 = 0) {
 	ta := context.temp_allocator
 	outer := make([dynamic]Vec2, ta)
 	tessellate_contour(prof.outer, tol, &outer)
@@ -159,33 +159,41 @@ extrude_profile :: proc(prof: Profile2D, thickness: f32, tol: f32, m: ^Mesh_Data
 		if polygon_area(hp[:]) > 0 {reverse_points(hp[:])}
 		append(&holes, hp[:])
 	}
-	e := clamp(edge_r, 0, thickness * 0.5 - 0.01)
+	limit := thickness * 0.5 - 0.01
+	eb := clamp(edge_bottom, 0, limit)
+	et := clamp(edge_top, 0, limit)
 
 	rings := make([dynamic]Wall_Ring, ta)
-	if e <= 0 {
-		append(&rings, Wall_Ring{0, 0, 1, 0}, Wall_Ring{thickness, 0, 1, 0})
+	if eb <= 0 {
+		append(&rings, Wall_Ring{0, 0, 1, 0})
 	} else {
 		for k in 0 ..= ROUND_STEPS {
 			phi := f32(k) / ROUND_STEPS * math.PI * 0.5
-			append(&rings, Wall_Ring{e * (1 - math.cos(phi)), e * (1 - math.sin(phi)), math.sin(phi), -math.cos(phi)})
+			append(&rings, Wall_Ring{eb * (1 - math.cos(phi)), eb * (1 - math.sin(phi)), math.sin(phi), -math.cos(phi)})
 		}
+	}
+	if et <= 0 {
+		append(&rings, Wall_Ring{thickness, 0, 1, 0})
+	} else {
 		for k := ROUND_STEPS; k >= 0; k -= 1 {
 			phi := f32(k) / ROUND_STEPS * math.PI * 0.5
-			append(&rings, Wall_Ring{thickness - e * (1 - math.cos(phi)), e * (1 - math.sin(phi)), math.sin(phi), math.cos(phi)})
+			append(&rings, Wall_Ring{thickness - et * (1 - math.cos(phi)), et * (1 - math.sin(phi)), math.sin(phi), math.cos(phi)})
 		}
 	}
 
-	// caps, inset by the rounding so they meet the curved band
-	cap_outer := inset_ring(outer[:], ring_info(outer[:], true), e)
-	cap_holes := make([dynamic][]Vec2, ta)
-	for h in holes {append(&cap_holes, inset_ring(h, ring_info(h, true), e))}
-	verts, tris := triangulate(cap_outer, cap_holes[:], ta)
-	up := Vec3{0, 1, 0}
-	for k := 0; k + 2 < len(tris); k += 3 {
-		a, b, c := verts[tris[k]], verts[tris[k + 1]], verts[tris[k + 2]]
-		tri(m, to3(a, thickness), to3(b, thickness), to3(c, thickness), up, up, up, a * UV_SCALE, b * UV_SCALE, c * UV_SCALE)
-		tri(m, to3(a, 0), to3(b, 0), to3(c, 0), -up, -up, -up, a * UV_SCALE, b * UV_SCALE, c * UV_SCALE)
+	// caps, inset by their rounding so they meet the curved band
+	cap :: proc(m: ^Mesh_Data, outer: []Vec2, holes: [][]Vec2, inset: f32, y: f32, n: Vec3) {
+		cap_outer := inset_ring(outer, ring_info(outer, true), inset)
+		cap_holes := make([dynamic][]Vec2, context.temp_allocator)
+		for h in holes {append(&cap_holes, inset_ring(h, ring_info(h, true), inset))}
+		verts, tris := triangulate(cap_outer, cap_holes[:], context.temp_allocator)
+		for k := 0; k + 2 < len(tris); k += 3 {
+			a, b, c := verts[tris[k]], verts[tris[k + 1]], verts[tris[k + 2]]
+			tri(m, to3(a, y), to3(b, y), to3(c, y), n, n, n, a * UV_SCALE, b * UV_SCALE, c * UV_SCALE)
+		}
 	}
+	cap(m, outer[:], holes[:], et, thickness, {0, 1, 0})
+	cap(m, outer[:], holes[:], eb, 0, {0, -1, 0})
 
 	walls :: proc(m: ^Mesh_Data, pts: []Vec2, rings: []Wall_Ring, rounded: bool) {
 		n := len(pts)
@@ -220,8 +228,9 @@ extrude_profile :: proc(prof: Profile2D, thickness: f32, tol: f32, m: ^Mesh_Data
 			if !rounded && !ri.smooth[i] {edge(m, to3(pts[i], 0), to3(pts[i], rings[last].y))}
 		}
 	}
-	walls(m, outer[:], rings[:], e > 0)
-	for h in holes {walls(m, h, rings[:], e > 0)}
+	rounded := eb > 0 || et > 0
+	walls(m, outer[:], rings[:], rounded)
+	for h in holes {walls(m, h, rings[:], rounded)}
 }
 
 // Revolves a half profile of (radius, height) points around the local Y axis.

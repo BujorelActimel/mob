@@ -196,7 +196,7 @@ test_extrude_rounded_edges :: proc(t: ^testing.T) {
 	prof.outer = geom.contour_from_polygon([]geom.Vec2{{0, 0}, {300, 0}, {300, 200}, {0, 200}}, []f32{3, 3, 3, 3}, true, context.temp_allocator)
 	m: geom.Mesh_Data
 	geom.mesh_init(&m, context.temp_allocator)
-	geom.extrude_profile(prof, 18, 0.05, &m, 3)
+	geom.extrude_profile(prof, 18, 0.05, &m, 3, 3)
 	lo, hi := geom.mesh_bounds(m)
 	testing.expectf(t, linalg.length(lo - geom.Vec3{0, 0, -200}) < 0.01 && linalg.length(hi - geom.Vec3{300, 18, 0}) < 0.01, "bounds %v %v", lo, hi)
 	top_area: f32
@@ -220,5 +220,26 @@ test_extrude_rounded_edges :: proc(t: ^testing.T) {
 	// only cap loops as feature edges (no sharp verticals)
 	for k := 0; k < len(m.edges); k += 2 {
 		testing.expect(t, m.edges[k].y == m.edges[k + 1].y)
+	}
+}
+
+@(test)
+test_extrude_bottom_edges_only :: proc(t: ^testing.T) {
+	prof: geom.Profile2D
+	prof.outer = geom.contour_from_polygon([]geom.Vec2{{0, 0}, {300, 0}, {300, 200}, {0, 200}}, []f32{3, 3, 3, 3}, true, context.temp_allocator)
+	m: geom.Mesh_Data
+	geom.mesh_init(&m, context.temp_allocator)
+	geom.extrude_profile(prof, 18, 0.05, &m, edge_bottom = 3, edge_top = 0)
+	max_x_at :: proc(m: geom.Mesh_Data, y: f32) -> f32 {
+		mx := f32(-1)
+		for p in m.positions {if abs(p.y - y) < 1e-3 {mx = max(mx, p.x)}}
+		return mx
+	}
+	// top edge stays square (reaches the outline), bottom is inset by the radius
+	testing.expectf(t, abs(max_x_at(m, 18) - 300) < 1e-3, "top %v", max_x_at(m, 18))
+	testing.expectf(t, abs(max_x_at(m, 0) - 297) < 1e-2, "bottom %v", max_x_at(m, 0))
+	for k := 0; k < len(m.positions); k += 3 {
+		f := linalg.cross(m.positions[k + 1] - m.positions[k], m.positions[k + 2] - m.positions[k])
+		testing.expect(t, linalg.dot(f, m.normals[k] + m.normals[k + 1] + m.normals[k + 2]) > 0)
 	}
 }

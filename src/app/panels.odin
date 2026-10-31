@@ -652,13 +652,7 @@ draw_dimensions :: proc(a: ^App) {
 draw_tool_feedback_3d :: proc(a: ^App) {
 	if a.tool == .Push_Pull {
 		f := a.drag.kind == .Push_Pull ? a.drag.face : a.pp_hover
-		if a.drag.kind == .Push_Pull {
-			// face moves with the drag; recompute from the current mesh
-			f2 := f
-			draw_face_highlight(a, f2, ui.THEME.accent)
-		} else {
-			draw_face_highlight(a, f, {255, 190, 120, 255})
-		}
+		draw_face_highlight(a, f, a.drag.kind == .Push_Pull ? ui.THEME.accent : {255, 190, 120, 255})
 	}
 	if a.place_preview.valid {
 		pp := a.place_preview

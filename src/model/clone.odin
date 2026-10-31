@@ -53,7 +53,7 @@ profile_copy :: proc(dst: ^Document, p: Profile_Def) -> Profile_Def {
 shape_copy :: proc(dst: ^Document, s: Shape) -> Shape {
 	switch v in s {
 	case Panel:
-		return Panel{profile = profile_copy(dst, v.profile), thickness = field_copy(dst, v.thickness), edge = field_copy(dst, v.edge)}
+		return Panel{profile = profile_copy(dst, v.profile), thickness = field_copy(dst, v.thickness), edge = field_copy(dst, v.edge), edge_sides = v.edge_sides}
 	case Turned:
 		return Turned{points = points_copy(dst, v.points[:]), segments = v.segments}
 	case Swept:

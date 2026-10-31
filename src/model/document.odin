@@ -80,11 +80,19 @@ Profile_Def :: struct {
 	holes:  [dynamic]Hole_Def,
 }
 
+// Which faces of a panel get rounded edges.
+Edge_Sides :: enum u8 {
+	Both,
+	Top, // only the edges around the top face
+	Bottom, // only the edges around the bottom face, e.g. under a glued-on lip
+}
+
 // Flat board: outline in the part's XZ plane, extruded along +Y.
 Panel :: struct {
-	profile:   Profile_Def,
-	thickness: Expr_Field, // empty = material thickness
-	edge:      Expr_Field, // radius of the rounded (sanded) edges; empty = sharp
+	profile:    Profile_Def,
+	thickness:  Expr_Field, // empty = material thickness
+	edge:       Expr_Field, // radius of the rounded (sanded) edges; empty = sharp
+	edge_sides: Edge_Sides,
 }
 
 // Lathe part: points are (radius, height), revolved around local +Y.

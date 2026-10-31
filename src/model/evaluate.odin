@@ -22,7 +22,8 @@ Resolved_Part :: struct {
 	kind:      Shape_Kind,
 	profile:   geom.Profile2D, // panel outline / swept cross-section
 	thickness: f32,
-	edge:      f32, // edge rounding radius (panels)
+	edge:       f32, // edge rounding radius (panels)
+	edge_sides: Edge_Sides,
 	line:      []geom.Vec2, // turned half-profile (r, h) / swept path, tessellated
 	segments:  int,
 	hash:      u64,
@@ -328,6 +329,7 @@ resolve_part :: proc(c: ^Ctx, p: ^Part, parent: ^Group, s: ^Scope, parent_world:
 		fallback := mat != nil ? mat.thickness : 18
 		rp.thickness = f32(max(ev(c, &sh.thickness, s, fallback), 0.1))
 		rp.edge = clamp(f32(ev(c, &sh.edge, s, 0)), 0, rp.thickness * 0.5 - 0.01)
+		rp.edge_sides = sh.edge_sides
 		rp.profile = resolve_profile(c, &sh.profile, s, min_radius = rp.edge)
 	case Turned:
 		rp.line = resolve_polyline(c, sh.points[:], s)
@@ -353,6 +355,8 @@ shape_hash :: proc(rp: Resolved_Part) -> u64 {
 	mix(&h, mem.ptr_to_bytes(&t))
 	er := rp.edge
 	mix(&h, mem.ptr_to_bytes(&er))
+	es := rp.edge_sides
+	mix(&h, mem.ptr_to_bytes(&es))
 	sg := rp.segments
 	mix(&h, mem.ptr_to_bytes(&sg))
 	contour :: proc(h: ^u64, c: geom.Contour) {
@@ -383,7 +387,9 @@ shape_hash :: proc(rp: Resolved_Part) -> u64 {
 build_mesh :: proc(rp: Resolved_Part, m: ^geom.Mesh_Data, tol: f32 = 0.15) {
 	switch rp.kind {
 	case .Panel:
-		geom.extrude_profile(rp.profile, rp.thickness, tol, m, rp.edge)
+		bottom := rp.edge_sides != .Top ? rp.edge : 0
+		top := rp.edge_sides != .Bottom ? rp.edge : 0
+		geom.extrude_profile(rp.profile, rp.thickness, tol, m, bottom, top)
 	case .Turned:
 		geom.lathe(rp.line, rp.segments, m)
 	case .Swept:

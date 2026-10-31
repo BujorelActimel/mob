@@ -26,6 +26,9 @@ Resolved_Part :: struct {
 	segments:  int,
 	hash:      u64,
 	errors:    int,
+	// world-space bounds, filled in by the renderer when it syncs meshes
+	world_lo:  [3]f32,
+	world_hi:  [3]f32,
 }
 
 Resolved_Group :: struct {

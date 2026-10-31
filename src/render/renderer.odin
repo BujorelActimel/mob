@@ -205,7 +205,7 @@ sync :: proc(r: ^Renderer, res: ^model.Eval_Result) {
 	r.has_scene = false
 	lo := Vec3{max(f32), max(f32), max(f32)}
 	hi := -lo
-	for rp in res.parts {
+	for &rp in res.parts {
 		g, ok := &r.cache[rp.hash]
 		if !ok {
 			ng: Gpu_Mesh
@@ -229,9 +229,9 @@ sync :: proc(r: ^Renderer, res: ^model.Eval_Result) {
 			g = &r.cache[rp.hash]
 		}
 		g.used = true
-		wlo, whi := transform_aabb(rp.world, g.lo, g.hi)
-		lo = linalg.min(lo, wlo)
-		hi = linalg.max(hi, whi)
+		rp.world_lo, rp.world_hi = transform_aabb(rp.world, g.lo, g.hi)
+		lo = linalg.min(lo, rp.world_lo)
+		hi = linalg.max(hi, rp.world_hi)
 		r.has_scene = true
 	}
 	stale := make([dynamic]u64, context.temp_allocator)
@@ -265,9 +265,7 @@ transform_aabb :: proc(m: Mat4, lo, hi: Vec3) -> (Vec3, Vec3) {
 }
 
 part_world_bounds :: proc(r: ^Renderer, rp: model.Resolved_Part) -> (Vec3, Vec3) {
-	g := mesh_of(r, rp)
-	if g == nil {return {}, {}}
-	return transform_aabb(rp.world, g.lo, g.hi)
+	return rp.world_lo, rp.world_hi
 }
 
 // ---------------------------------------------------------------------------
@@ -288,6 +286,8 @@ pick :: proc(r: ^Renderer, res: ^model.Eval_Result, ray: geom.Ray, skip: []model
 	best := Pick{t = max(f32)}
 	outer: for rp, i in res.parts {
 		for s in skip {if s == rp.id {continue outer}}
+		// cheap world-space reject before inverting the part's matrix
+		if t, ok := geom.ray_aabb(ray, rp.world_lo - 0.01, rp.world_hi + 0.01); !ok || t > best.t {continue}
 		g := mesh_of(r, rp)
 		if g == nil || len(g.data.positions) == 0 {continue}
 		inv := linalg.inverse(rp.world)

@@ -84,6 +84,7 @@ Profile_Def :: struct {
 Panel :: struct {
 	profile:   Profile_Def,
 	thickness: Expr_Field, // empty = material thickness
+	edge:      Expr_Field, // radius of the rounded (sanded) edges; empty = sharp
 }
 
 // Lathe part: points are (radius, height), revolved around local +Y.

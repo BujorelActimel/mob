@@ -84,6 +84,7 @@ frame :: proc(a: ^App) -> bool {
 	draw_tool_feedback_3d(a)
 	draw_gizmo(a)
 	rl.EndMode3D()
+	draw_part_labels(a, cam)
 	draw_dimensions(a)
 	draw_drag_readout(a)
 

@@ -463,6 +463,10 @@ part_inspector :: proc(a: ^App, p: ^model.Part) {
 	}
 
 	transform_rows(a, owner, &p.xf, shape_kind_is_panel(p))
+	if ui.checkbox(&a.ui, "Show name in view", &p.label) {
+		p.label = !p.label // checkbox already flipped it; route through apply
+		apply(a, Cmd_Toggle{flag = &p.label})
+	}
 
 	// the parameters that drive this part, editable in place
 	ref, ok := model.find_node(a.doc, p.id)

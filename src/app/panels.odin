@@ -599,6 +599,53 @@ dim_line :: proc(a: ^App, p0, p1: Vec3, offset_dir: Vec3, offset_px: f32, value:
 	dim_label(a, (a0 + a1) * 0.5, model.format_number(f64(math.round(value * 10) / 10)))
 }
 
+// Names of parts marked "Show name in view", centred on the top of each part
+// and shrunk to fit its projected size; skipped when the part is too small on
+// screen to hold any text.
+draw_part_labels :: proc(a: ^App, cam: rl.Camera3D) {
+	if a.editor.open {return}
+	fwd := linalg.normalize0(cam.target - cam.position)
+	for &rp in a.res.parts {
+		if rp.part == nil || !rp.part.label || rp.part.name == "" {continue}
+		lo, hi := Vec3(rp.world_lo), Vec3(rp.world_hi)
+		c := Vec3{(lo.x + hi.x) * 0.5, hi.y, (lo.z + hi.z) * 0.5}
+		if linalg.dot(c - cam.position, fwd) <= 0 {continue}
+		// screen extent of the top face
+		smin, smax := Vec2{max(f32), max(f32)}, Vec2{-max(f32), -max(f32)}
+		for corner in ([4]Vec3{{lo.x, hi.y, lo.z}, {hi.x, hi.y, lo.z}, {lo.x, hi.y, hi.z}, {hi.x, hi.y, hi.z}}) {
+			sp := rl.GetWorldToScreen(corner, cam)
+			smin, smax = linalg.min(smin, sp), linalg.max(smax, sp)
+		}
+		avail := smax - smin
+		if avail.x < 28 || avail.y < 14 {continue}
+		// too wide for one line but tall enough for two: break at the space
+		// closest to the middle
+		lines := [2]string{rp.part.name, ""}
+		n := 1
+		if ui.text_width(&a.ui, rp.part.name, .Small) + 10 > avail.x - 4 && avail.y >= 36 {
+			best := -1
+			for ch, i in rp.part.name {
+				if ch == ' ' && (best < 0 || abs(i - len(rp.part.name) / 2) < abs(best - len(rp.part.name) / 2)) {best = i}
+			}
+			if best > 0 {
+				lines = {rp.part.name[:best], rp.part.name[best + 1:]}
+				n = 2
+			}
+		}
+		tw: f32
+		for l in lines[:n] {tw = max(tw, ui.text_width(&a.ui, l, .Small))}
+		p := rl.GetWorldToScreen(c, cam)
+		w := min(tw + 10, avail.x - 4)
+		h := min(f32(n) * 16 + 2, avail.y - 2)
+		r := rl.Rectangle{p.x - w * 0.5, p.y - h * 0.5, w, h}
+		ui.rounded(r, 4, {30, 32, 37, 200})
+		for l, k in lines[:n] {
+			lr := rl.Rectangle{r.x + 3, r.y + 1 + f32(k) * 16, r.width - 6, 16}
+			ui.text_in(&a.ui, l, lr, .Small, ui.THEME.text, .Center)
+		}
+	}
+}
+
 // Clear vertical gaps between stacked flat panels (shelves): every gap inside a
 // selected group, or the gaps above and below a selected shelf.
 @(private)

@@ -73,6 +73,7 @@ part_copy :: proc(dst: ^Document, p: ^Part, fresh_ids: bool) -> ^Part {
 		shape     = shape_copy(dst, p.shape),
 		grain_rot = p.grain_rot,
 		hidden    = p.hidden,
+		label     = p.label,
 	}
 	return out
 }

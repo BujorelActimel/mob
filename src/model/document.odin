@@ -141,6 +141,7 @@ Part :: struct {
 	shape:     Shape,
 	grain_rot: bool, // grain runs along local Z instead of X
 	hidden:    bool,
+	label:     bool, // draw the name on the part in the 3D view
 }
 
 Group :: struct {

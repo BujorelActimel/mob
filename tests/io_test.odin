@@ -13,6 +13,7 @@ test_json_roundtrip :: proc(t: ^testing.T) {
 	append(&d.root.children, model.template_vinyl_corner(d))
 	append(&d.root.children, model.template_table(d))
 	sw := model.new_swept(d, "Rail")
+	sw.label = true
 	append(&d.root.children, sw)
 	data, ok := mobio.marshal_document(d, context.temp_allocator)
 	testing.expect(t, ok)
@@ -30,6 +31,7 @@ test_json_roundtrip :: proc(t: ^testing.T) {
 	for i in 0 ..< len(a.parts) {
 		testing.expect_value(t, b.parts[i].hash, a.parts[i].hash)
 		testing.expect_value(t, b.parts[i].id, a.parts[i].id)
+		testing.expect_value(t, b.parts[i].part.label, a.parts[i].part.label)
 	}
 	testing.expect(t, d2.next_id >= d.next_id)
 	// expressions are stored as source text

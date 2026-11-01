@@ -41,6 +41,7 @@ F_Node :: struct {
 	expanded:  bool,
 	material:  u32,
 	grain_rot: bool,
+	label:     bool `json:"label,omitempty"`,
 	profile:   F_Profile,
 	thickness: string,
 	edge:      string `json:"edge,omitempty"`,
@@ -129,6 +130,7 @@ to_node :: proc(n: model.Node) -> F_Node {
 		out.hidden = v.hidden
 		out.material = v.material
 		out.grain_rot = v.grain_rot
+		out.label = v.label
 		switch s in v.shape {
 		case model.Panel:
 			out.type = "panel"
@@ -257,6 +259,7 @@ from_node :: proc(d: ^model.Document, fn: F_Node) -> model.Node {
 		xf        = xf,
 		grain_rot = fn.grain_rot,
 		hidden    = fn.hidden,
+		label     = fn.label,
 	}
 	switch fn.type {
 	case "panel":

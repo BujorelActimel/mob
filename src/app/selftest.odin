@@ -287,6 +287,7 @@ ui_selftest :: proc(a: ^App) -> bool {
 	defer delete(override)
 	settings_path_override = override
 	check(&all_ok, platform.gestures_ready(), "native pinch monitor installed")
+	check(&all_ok, platform.has_file_chooser(), "native file chooser available")
 	check(&all_ok, click_button(a, ui.id("settings-btn")) && a.show_settings, "toolbar: settings button opens settings")
 	step(a, 2)
 	check(&all_ok, click_button(a, ui.id_n(ui.id("set-preset"), 1)) && a.settings.scroll == .Pan && a.settings.pinch_zoom, "settings: Trackpad preset")

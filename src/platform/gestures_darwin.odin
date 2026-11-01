@@ -1,7 +1,6 @@
 #+build darwin
 // Trackpad gestures GLFW does not expose. On macOS a local NSEvent monitor
-// sees magnify (pinch) events before GLFW processes them. The Objective-C
-// runtime is called through objc_msgSend directly.
+// sees magnify (pinch) events before GLFW processes them.
 package platform
 
 import "core:c"
@@ -23,7 +22,6 @@ Block_Literal :: struct {
 }
 
 @(private) pinch_accum: f32
-@(private) msg_send: rawptr // objc_msgSend, cast per call signature
 @(private) descriptor := Block_Descriptor{0, size_of(Block_Literal)}
 @(private) block: Block_Literal
 @(private) installed: bool
@@ -45,22 +43,18 @@ on_event :: proc "c" (b: rawptr, event: rawptr) -> rawptr {
 install_gestures :: proc() {
 	if installed {return}
 	installed = true
-	lib, ok := dynlib.load_library("/usr/lib/libobjc.A.dylib")
-	if !ok {return}
+	if !objc_load() {return}
 	sys, sys_ok := dynlib.load_library("/usr/lib/libSystem.B.dylib")
 	if !sys_ok {return}
-	msg_send, _ = dynlib.symbol_address(lib, "objc_msgSend")
-	get_class := cast(proc "c" (cstring) -> rawptr)(dynlib.symbol_address(lib, "objc_getClass") or_else nil)
-	sel := cast(proc "c" (cstring) -> rawptr)(dynlib.symbol_address(lib, "sel_registerName") or_else nil)
 	global_block, _ := dynlib.symbol_address(sys, "_NSConcreteGlobalBlock")
-	if msg_send == nil || get_class == nil || sel == nil || global_block == nil {return}
-	sel_type = sel("type")
-	sel_magnification = sel("magnification")
+	if global_block == nil {return}
+	sel_type = objc_sel("type")
+	sel_magnification = objc_sel("magnification")
 	BLOCK_IS_GLOBAL :: 1 << 28
 	block = {isa = global_block, flags = BLOCK_IS_GLOBAL, invoke = on_event, descriptor = &descriptor}
 	MASK_MAGNIFY: c.ulonglong : 1 << NS_EVENT_TYPE_MAGNIFY
 	add := cast(proc "c" (rawptr, rawptr, c.ulonglong, rawptr) -> rawptr)msg_send
-	add(get_class("NSEvent"), sel("addLocalMonitorForEventsMatchingMask:handler:"), MASK_MAGNIFY, &block)
+	add(objc_class("NSEvent"), objc_sel("addLocalMonitorForEventsMatchingMask:handler:"), MASK_MAGNIFY, &block)
 }
 
 // Pinch amount since the last call (+ = fingers apart = zoom in).

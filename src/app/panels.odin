@@ -10,6 +10,7 @@ import "core:strings"
 import rl "vendor:raylib"
 import mobio "../io"
 import "../model"
+import "../platform"
 import "../render"
 import "../ui"
 
@@ -353,7 +354,8 @@ toasts :: proc(a: ^App, area: rl.Rectangle) {
 }
 
 // ---------------------------------------------------------------------------
-// Dialogs (paths are typed; files can also be dropped on the window)
+// Dialogs (paths are typed; files can also be dropped on the window). Open
+// uses the native file chooser where there is one.
 
 open_dialog :: proc(a: ^App, kind: Dialog_Kind) {
 	a.dialog.kind = kind
@@ -375,6 +377,13 @@ open_dialog :: proc(a: ^App, kind: Dialog_Kind) {
 dialog :: proc(a: ^App, screen: rl.Rectangle) {
 	dk := a.dialog.kind
 	if dk == .None {return}
+	if dk == .Open && !a.ui.sim && platform.has_file_chooser() {
+		a.dialog.kind = .None
+		dir := a.dialog.path
+		if !os.is_dir(dir) {dir = filepath.dir(dir)}
+		if path, ok := platform.choose_file(dir, "mob"); ok {open_document(a, path)}
+		return
+	}
 	rl.DrawRectangleRec(screen, {10, 11, 13, 110})
 	ui.block(&a.ui, screen)
 	w: f32 = 700

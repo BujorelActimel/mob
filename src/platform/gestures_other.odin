@@ -1,4 +1,5 @@
 #+build !darwin
+#+build !linux
 package platform
 
 @(private)
